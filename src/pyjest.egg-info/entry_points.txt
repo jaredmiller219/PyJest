@@ -1,0 +1,2 @@
+[console_scripts]
+pyjest = pyjest:main

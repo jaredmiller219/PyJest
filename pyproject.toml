@@ -1,0 +1,16 @@
+[project]
+name = "pyjest"
+version = "0.1.0"
+description = "Jest-inspired CLI runner for Python's unittest module."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "Jared Miller" }
+]
+
+[tool.setuptools]
+packages = ["pyjest"]
+package-dir = {"" = "src"}
+
+[project.scripts]
+pyjest = "pyjest:main"

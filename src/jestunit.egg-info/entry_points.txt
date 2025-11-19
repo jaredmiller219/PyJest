@@ -1,0 +1,2 @@
+[console_scripts]
+jestunit = jestunit:main

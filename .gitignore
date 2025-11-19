@@ -1,0 +1,41 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build Artifacts
+build/
+dist/
+target/
+*.o
+*.a
+*.so
+*.dll
+*.exe
+
+# IDE and Editor Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Dependencies and Virtual Environments
+node_modules/
+vendor/
+venv/
+env/
+
+# Log Files
+*.log
+
+# Temporary Files
+*.tmp
+temp/
+

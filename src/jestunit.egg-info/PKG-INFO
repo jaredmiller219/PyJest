@@ -1,0 +1,26 @@
+Metadata-Version: 2.4
+Name: jestunit
+Version: 0.1.0
+Summary: Jest-inspired CLI runner for Python's unittest module.
+Author: Codex
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+
+# jestunit
+
+`jestunit` is a zero-dependency CLI that runs Python `unittest` test suites with
+Jest-like output. Drop it into any repo, `pip install --editable .`, and run the
+`jestunit` command to see colorful per-test output, structured summaries, and a
+nicer overall experience than `python -m unittest`.
+
+## Usage
+
+```bash
+pip install --editable /path/to/jestunit
+cd /path/to/your/project
+jestunit --pattern 'test_*.py' tests
+```
+
+Use `--root /path/to/project` to point the runner at a different working tree
+without `cd`-ing first. Targets accept modules, packages, or filesystem paths;
+leave them blank to auto-discover tests in `./tests`.
