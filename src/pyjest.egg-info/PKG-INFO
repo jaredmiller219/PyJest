@@ -2,7 +2,7 @@ Metadata-Version: 2.4
 Name: pyjest
 Version: 0.1.0
 Summary: Jest-inspired CLI runner for Python's unittest module.
-Author: Codex
+Author: Jared Miller
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 
