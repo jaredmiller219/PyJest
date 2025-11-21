@@ -39,3 +39,4 @@ env/
 *.tmp
 temp/
 
+*.pyc
