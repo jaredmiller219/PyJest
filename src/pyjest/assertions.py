@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from .snapshot import STORE
 
 def _pretty(value: Any) -> str:
     return pprint.pformat(value, width=80, compact=True)
@@ -111,6 +112,9 @@ class Expectation:
             self._fail(f"Expected {exc_type.__name__}, but {type(exc).__name__} was raised")
         else:
             self._fail(f"Expected {exc_type.__name__} to be raised, but no exception occurred")
+
+    def to_match_snapshot(self, name: str | None = None) -> None:
+        STORE.assert_match(self.value, name=name)
 
 
 @dataclass

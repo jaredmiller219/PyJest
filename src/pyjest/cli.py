@@ -23,6 +23,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Polling interval in seconds when using --watch (default: %(default)s)",
     )
     parser.add_argument(
+        "--watch-debounce",
+        type=float,
+        default=0.2,
+        help="Extra debounce delay after a change is detected (default: %(default)s)",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=None,

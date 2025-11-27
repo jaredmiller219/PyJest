@@ -110,10 +110,14 @@ def _load_tests_from_pyjest_file(loader: unittest.TestLoader, path: Path) -> uni
 
 def _discover_pyjest_files(loader: unittest.TestLoader, directory: Path, pattern: str) -> list[unittest.TestSuite]:
     suites: list[unittest.TestSuite] = []
-    for file in sorted(directory.rglob("*.pyjest")):
-        if not _pyjest_matches_pattern(file, pattern):
-            continue
-        suites.append(_load_tests_from_pyjest_file(loader, file))
+    for root, _, files in os.walk(directory):
+        for name in files:
+            if not name.endswith(".pyjest"):
+                continue
+            path = Path(root) / name
+            if not _pyjest_matches_pattern(path, pattern):
+                continue
+            suites.append(_load_tests_from_pyjest_file(loader, path))
     return suites
 
 
@@ -164,7 +168,7 @@ def _load_targets(loader: unittest.TestLoader, targets: Sequence[str], pattern: 
     for target in targets:
         path = Path(target)
         if path.is_dir():
-            if not any(path.rglob("*.py")) and not any(path.rglob("*.pyjest")):
+            if not _has_test_files(path):
                 raise SystemExit(
                     f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files."
                 )
@@ -182,3 +186,11 @@ def _load_targets(loader: unittest.TestLoader, targets: Sequence[str], pattern: 
                 )
         suites.append(loader.loadTestsFromName(target))
     return unittest.TestSuite(suites)
+
+
+def _has_test_files(path: Path) -> bool:
+    for root, _, files in os.walk(path):
+        for name in files:
+            if name.endswith(".py") or name.endswith(".pyjest"):
+                return True
+    return False

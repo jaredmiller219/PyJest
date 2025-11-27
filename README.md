@@ -28,6 +28,8 @@ automatically picks up `.pyjest` files as part of discovery).
 - `--maxWorkers 1`: parsed for future parallelism; currently must be 1.
 - `--updateSnapshot`: accepted for future snapshot support.
 - `--coverage [--coverage-html DIR] [--coverage-threshold PCT]`: optional coverage.py integration; write HTML to `coverage_html` by default when flag is present.
+- `--maxWorkers N`: basic parallel run across multiple targets (experimental).
+- `--watch-debounce SECONDS`: extra debounce delay after change detection (default 0.2s).
 
 ### Expect-style assertions
 
@@ -45,6 +47,9 @@ async def fetch():
     return {"ok": True}
 
 await expect_async(fetch()).to_resolve_to({"ok": True})
+
+# Snapshots (write with --updateSnapshot)
+expect({"nested": ["value"]}).to_match_snapshot()
 ```
 
 ### Typing and editor support
