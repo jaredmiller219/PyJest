@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import Any
 
 
 def make_coverage(root: Path):
@@ -16,7 +17,7 @@ def make_coverage(root: Path):
     return coverage.Coverage(branch=True, source=[str(root)])
 
 
-def report_coverage(cov, html_dir: str | None) -> float:
+def report_coverage(cov: Any, html_dir: str | None) -> float:
     buffer = io.StringIO()
     percent = cov.report(skip_empty=True, file=buffer)
     report_text = buffer.getvalue().strip()

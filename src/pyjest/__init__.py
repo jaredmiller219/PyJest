@@ -25,7 +25,9 @@ from .watch import detect_changes, snapshot_watchable_files, targets_from_change
 __all__ = ["expect", "expect_async", "mark_pyjest", "marked_modules", "main"]
 
 
-def _run_suite(loader: unittest.TestLoader, runner: JestStyleTestRunner, args, targets: Sequence[str]):
+def _run_suite(
+    loader: unittest.TestLoader, runner: JestStyleTestRunner, args, targets: Sequence[str]
+) -> tuple[unittest.result.TestResult, float | None]:
     cov = make_coverage(args.root) if args.coverage else None
     if cov:
         cov.start()

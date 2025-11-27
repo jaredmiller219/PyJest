@@ -7,7 +7,7 @@ import unittest
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
+from typing import IO, Sequence
 
 from .colors import (
     BG_GREEN,
@@ -73,7 +73,7 @@ class ModuleReport:
 class JestStyleResult(unittest.TestResult):
     """Custom ``unittest`` result object that prints Jest-like progress."""
 
-    def __init__(self, stream, descriptions, verbosity):  # type: ignore[override]
+    def __init__(self, stream: IO[str], descriptions, verbosity):  # type: ignore[override]
         super().__init__()
         self.stream = stream
         self.descriptions = descriptions

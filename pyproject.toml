@@ -11,6 +11,7 @@ authors = [
 [tool.setuptools]
 packages = ["pyjest"]
 package-dir = {"" = "src"}
+package-data = {"pyjest" = ["py.typed"]}
 
 [project.scripts]
 pyjest = "pyjest:main"

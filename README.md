@@ -46,3 +46,8 @@ async def fetch():
 
 await expect_async(fetch()).to_resolve_to({"ok": True})
 ```
+
+### Typing and editor support
+
+- Package ships `py.typed` so type checkers pick up inline annotations.
+- VS Code: `.vscode/launch.json` includes run + watch configs that launch `python -m pyjest` against `tests`.
