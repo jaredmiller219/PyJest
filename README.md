@@ -27,6 +27,7 @@ automatically picks up `.pyjest` files as part of discovery).
 - `--runInBand`: explicit serial execution (default for now).
 - `--maxWorkers 1`: parsed for future parallelism; currently must be 1.
 - `--updateSnapshot`: accepted for future snapshot support.
+- `--coverage [--coverage-html DIR] [--coverage-threshold PCT]`: optional coverage.py integration; write HTML to `coverage_html` by default when flag is present.
 
 ### Expect-style assertions
 
