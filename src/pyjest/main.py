@@ -8,7 +8,9 @@ from typing import Sequence
 from .assertions import expect, expect_async
 from .cli import parse_args
 from .discovery import mark_pyjest, marked_modules
-from .orchestrator import prepare_environment, run_once, run_watch
+from .orchestrator.env import prepare_environment
+from .orchestrator.run_once import run_once
+from .orchestrator.watch_loop import run_watch
 
 __all__ = ["expect", "expect_async", "mark_pyjest", "marked_modules", "main"]
 
