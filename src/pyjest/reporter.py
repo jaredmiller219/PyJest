@@ -299,6 +299,8 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         finally:
             result.stopTestRun()
 
+        # Drop a newline after the inline progress symbols.
+        self.stream.writeln("")
         duration = time.perf_counter() - start_time
         result.print_module_reports()
         result.printErrors()
