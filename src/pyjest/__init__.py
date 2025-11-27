@@ -233,6 +233,18 @@ class JestStyleResult(unittest.TestResult):
         self._unexpected_successes: list[unittest.case.TestCase] = []
         self._module_reports: dict[str, ModuleReport] = {}
         self._module_order: list[str] = []
+        self._progress_started = False
+
+    def startTestRun(self):  # type: ignore[override]
+        super().startTestRun()
+        self.stream.writeln("Running tests...")
+        self._progress_started = True
+
+    def _write_progress(self, icon: str) -> None:
+        if not self._progress_started:
+            return
+        self.stream.write(icon)
+        self.stream.flush()
 
     @property
     def successes(self) -> Sequence[unittest.case.TestCase]:
@@ -346,6 +358,7 @@ class JestStyleResult(unittest.TestResult):
         duration = self._elapsed(test)
         self._successes.append(test)
         self._add_detail(test, "PASS", duration)
+        self._write_progress(_color("✓", BRIGHT_GREEN))
 
     def addFailure(self, test, err):  # type: ignore[override]
         super().addFailure(test, err)
@@ -353,6 +366,7 @@ class JestStyleResult(unittest.TestResult):
         formatted = self._exc_info_to_string(err, test)
         self._failures_detail.append((test, formatted))
         self._add_detail(test, "FAIL", duration, detail=formatted)
+        self._write_progress(_color("✕", BRIGHT_RED))
 
     def addError(self, test, err):  # type: ignore[override]
         super().addError(test, err)
@@ -360,24 +374,28 @@ class JestStyleResult(unittest.TestResult):
         formatted = self._exc_info_to_string(err, test)
         self._errors_detail.append((test, formatted))
         self._add_detail(test, "ERROR", duration, detail=formatted)
+        self._write_progress(_color("✕", BRIGHT_RED))
 
     def addSkip(self, test, reason):  # type: ignore[override]
         super().addSkip(test, reason)
         duration = self._elapsed(test)
         self._skips_detail.append((test, reason))
         self._add_detail(test, "SKIP", duration, note=reason)
+        self._write_progress(_color("↷", BRIGHT_YELLOW))
 
     def addExpectedFailure(self, test, err):  # type: ignore[override]
         super().addExpectedFailure(test, err)
         self._expected_failures.append((test, self._exc_info_to_string(err, test)))
         duration = self._elapsed(test)
         self._add_detail(test, "XF", duration)
+        self._write_progress(_color("≒", BRIGHT_YELLOW))
 
     def addUnexpectedSuccess(self, test):  # type: ignore[override]
         super().addUnexpectedSuccess(test)
         duration = self._elapsed(test)
         self._unexpected_successes.append(test)
         self._add_detail(test, "XPASS", duration)
+        self._write_progress(_color("★", BRIGHT_CYAN))
 
     def printErrors(self):  # type: ignore[override]
         sections = [
@@ -494,6 +512,46 @@ def _module_name_from_path(path: Path) -> str:
     return module
 
 
+def _snapshot_watchable_files(root: Path) -> dict[Path, float]:
+    """Return map of watchable files to mtimes."""
+    snapshot: dict[Path, float] = {}
+    patterns = ("*.py", "*.pyjest")
+    for pattern in patterns:
+        for path in root.rglob(pattern):
+            if any(part.startswith(".") for part in path.parts):
+                continue
+            try:
+                snapshot[path] = path.stat().st_mtime
+            except OSError:
+                continue
+    return snapshot
+
+
+def _detect_changes(previous: dict[Path, float], root: Path) -> tuple[set[Path], dict[Path, float]]:
+    current = _snapshot_watchable_files(root)
+    changed: set[Path] = set()
+    for path, mtime in current.items():
+        if previous.get(path) != mtime:
+            changed.add(path)
+    for path in previous:
+        if path not in current:
+            changed.add(path)
+    return changed, current
+
+
+def _targets_from_changed(changed: set[Path], default_targets: Sequence[str]) -> list[str]:
+    """Derive targets to run from changed files."""
+    if not changed:
+        return list(default_targets)
+    targets: list[str] = []
+    for path in sorted(changed):
+        if path.suffix == ".pyjest":
+            targets.append(str(path))
+        elif path.suffix == ".py":
+            targets.append(_module_name_from_path(path))
+    return targets or list(default_targets)
+
+
 def _load_targets(
     loader: unittest.TestLoader, targets: Sequence[str], pattern: str
 ) -> unittest.TestSuite:
@@ -532,6 +590,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         description="Run the test suite with Jest-style output."
     )
     parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch for filesystem changes and re-run tests",
+    )
+    parser.add_argument(
+        "--watch-interval",
+        type=float,
+        default=1.0,
+        help="Polling interval in seconds when using --watch (default: %(default)s)",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=None,
@@ -549,22 +618,69 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Filename pattern when discovering directories (default: %(default)s)",
     )
     parser.add_argument("--failfast", action="store_true", help="Stop on first failure")
+    parser.add_argument("--bail", action="store_true", help="Alias for --failfast")
+    parser.add_argument(
+        "--runInBand",
+        action="store_true",
+        help="Run tests serially (default; reserved for future parallelism)",
+    )
+    parser.add_argument(
+        "--maxWorkers",
+        type=int,
+        default=1,
+        help="Maximum workers (reserved; currently must be 1)",
+    )
+    parser.add_argument(
+        "--onlyChanged",
+        action="store_true",
+        help="In watch mode, re-run only tests affected by changed files",
+    )
+    parser.add_argument(
+        "--updateSnapshot",
+        action="store_true",
+        help="Parse snapshot update flag (reserved for future snapshot support)",
+    )
     parser.add_argument("--buffer", action="store_true", help="Buffer stdout/stderr during tests")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    args.failfast = args.failfast or args.bail
+    if args.maxWorkers != 1:
+        raise SystemExit("Parallel workers not yet supported. Use --maxWorkers 1 or omit it.")
     root = (args.root or Path.cwd()).expanduser().resolve()
     if args.root:
         os.chdir(root)
     _set_project_root(root)
     _ensure_python_project(root)
     loader = unittest.TestLoader()
-    suite = _load_targets(loader, args.targets, args.pattern)
     runner = JestStyleTestRunner(failfast=args.failfast, buffer=args.buffer, stream=sys.stdout)
-    result = runner.run(suite)
-    return 0 if result.wasSuccessful() else 1
+
+    def run_suite(targets: Sequence[str]) -> unittest.result.TestResult:
+        suite = _load_targets(loader, targets, args.pattern)
+        return runner.run(suite)
+
+    if not args.watch:
+        result = run_suite(args.targets)
+        return 0 if result.wasSuccessful() else 1
+
+    snapshot = _snapshot_watchable_files(root)
+    targets = args.targets
+    try:
+        while True:
+            result = run_suite(targets)
+            while True:
+                changed, snapshot = _detect_changes(snapshot, root)
+                if changed:
+                    break
+                time.sleep(args.watch_interval)
+            display = ", ".join(str(path.relative_to(root)) for path in sorted(changed)) if changed else "unknown"
+            print(f"\nChange detected: {display}")
+            targets = _targets_from_changed(changed, args.targets) if args.onlyChanged else args.targets
+    except KeyboardInterrupt:
+        print("\nWatch mode interrupted. Exiting.")
+        return 0 if result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":

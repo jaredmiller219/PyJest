@@ -19,3 +19,11 @@ Use `--root /path/to/project` to point the runner at a different working tree
 without `cd`-ing first. Targets accept modules, packages, or files ending in
 `.py` or `.pyjest`; leave them blank to auto-discover tests in `./tests` (PyJest
 automatically picks up `.pyjest` files as part of discovery).
+
+### CLI flags to try
+
+- `--watch [--onlyChanged] [--watch-interval 1.0]`: poll for changes and rerun, optionally narrowing to changed files.
+- `--bail`/`--failfast`: stop on first failure.
+- `--runInBand`: explicit serial execution (default for now).
+- `--maxWorkers 1`: parsed for future parallelism; currently must be 1.
+- `--updateSnapshot`: accepted for future snapshot support.
