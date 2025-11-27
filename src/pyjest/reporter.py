@@ -148,65 +148,18 @@ class JestStyleResult(unittest.TestResult):
         )
 
     def print_module_reports(self) -> None:
-        from .colors import BRIGHT_GREEN, BRIGHT_RED, BRIGHT_YELLOW, BRIGHT_CYAN  # local import to avoid cycles
-
-        status_colors = {"PASS": BRIGHT_GREEN, "FAIL": BRIGHT_RED, "SKIP": BRIGHT_YELLOW}
-        detail_colors = {
-            "PASS": BRIGHT_GREEN,
-            "FAIL": BRIGHT_RED,
-            "ERROR": BRIGHT_RED,
-            "SKIP": BRIGHT_YELLOW,
-            "XF": BRIGHT_YELLOW,
-            "XPASS": BRIGHT_CYAN,
-        }
-        icon_map = {
-            "PASS": color("✓", BRIGHT_GREEN),
-            "FAIL": color("✕", BRIGHT_RED),
-            "ERROR": color("✕", BRIGHT_RED),
-            "SKIP": color("↷", BRIGHT_YELLOW),
-            "XF": color("≒", BRIGHT_YELLOW),
-            "XPASS": color("★", BRIGHT_CYAN),
-        }
+        status_colors = _status_colors()
+        detail_colors = _detail_colors()
+        icon_map = _icon_map()
         self.stream.writeln("")
         for module_name in self._module_order:
             report = self._module_reports[module_name]
-            status = report.headline_status
-            clr = status_colors.get(status, CYAN)
-            if status == "PASS":
-                badge = f"{BG_GREEN}{FG_WHITE}{BOLD} {status} {RESET}"
-            elif status == "FAIL":
-                badge = f"{BG_RED}{FG_WHITE}{BOLD} {status} {RESET}"
-            else:
-                badge = color(f" {status} ", clr)
-            path = Path(report.display)
-            dimmed = str(path.parent) if path.parent != Path(".") else ""
-            filename = path.name
-            if dimmed:
-                display = f"{DIM}{dimmed}/{RESET}{color(filename, BOLD)}"
-            else:
-                display = color(filename, BOLD)
+            badge = _format_badge(report.headline_status, status_colors)
+            display = _format_module_display(report.display)
             self.stream.writeln(f"{badge} {display}")
             for class_name in report.group_order:
                 group = report.groups[class_name]
-                description = group.doc_title or class_name
-                class_line = f"  {color('›', BRIGHT_CYAN)} {description}"
-                self.stream.writeln(class_line)
-                for detail in group.tests:
-                    icon = icon_map.get(detail.status, color("•", CYAN))
-                    duration_ms = f"{detail.duration * 1000:.0f} ms"
-                    status_color = detail_colors.get(detail.status, CYAN)
-                    text_color = DIM
-                    if detail.status in {"FAIL", "ERROR"}:
-                        text_color = status_color
-                    line = f"    {icon} {color(detail.name, text_color)} {DIM}({duration_ms}){RESET}"
-                    if detail.note:
-                        line += f" {DIM}[{detail.note}]{RESET}"
-                    self.stream.writeln(line)
-                    if detail.summary and detail.summary != detail.name:
-                        self.stream.writeln(f"      {DIM}{detail.summary}{RESET}")
-                    if detail.detail and detail.status in {"FAIL", "ERROR"}:
-                        for extra_line in detail.detail.splitlines():
-                            self.stream.writeln(f"      {extra_line}")
+                self._print_group(group, detail_colors, icon_map)
                 self.stream.writeln("")
 
     def addSuccess(self, test):  # type: ignore[override]
@@ -279,6 +232,74 @@ class JestStyleResult(unittest.TestResult):
                 indented = "\n".join(f"      {line}" for line in err.splitlines())
                 self.stream.writeln(indented)
                 self.stream.writeln("")
+
+    def _print_group(self, group: ClassGroup, detail_colors: dict[str, str], icon_map: dict[str, str]) -> None:
+        description = group.doc_title or group.name
+        class_line = f"  {color('›', BRIGHT_CYAN)} {description}"
+        self.stream.writeln(class_line)
+        for detail in group.tests:
+            self._print_detail(detail, detail_colors, icon_map)
+
+    def _print_detail(self, detail: TestDetail, detail_colors: dict[str, str], icon_map: dict[str, str]) -> None:
+        icon = icon_map.get(detail.status, color("•", CYAN))
+        duration_ms = f"{detail.duration * 1000:.0f} ms"
+        status_color = detail_colors.get(detail.status, CYAN)
+        text_color = DIM
+        if detail.status in {"FAIL", "ERROR"}:
+            text_color = status_color
+        line = f"    {icon} {color(detail.name, text_color)} {DIM}({duration_ms}){RESET}"
+        if detail.note:
+            line += f" {DIM}[{detail.note}]{RESET}"
+        self.stream.writeln(line)
+        if detail.summary and detail.summary != detail.name:
+            self.stream.writeln(f"      {DIM}{detail.summary}{RESET}")
+        if detail.detail and detail.status in {"FAIL", "ERROR"}:
+            for extra_line in detail.detail.splitlines():
+                self.stream.writeln(f"      {extra_line}")
+
+
+def _status_colors() -> dict[str, str]:
+    return {"PASS": BRIGHT_GREEN, "FAIL": BRIGHT_RED, "SKIP": BRIGHT_YELLOW}
+
+
+def _detail_colors() -> dict[str, str]:
+    return {
+        "PASS": BRIGHT_GREEN,
+        "FAIL": BRIGHT_RED,
+        "ERROR": BRIGHT_RED,
+        "SKIP": BRIGHT_YELLOW,
+        "XF": BRIGHT_YELLOW,
+        "XPASS": BRIGHT_CYAN,
+    }
+
+
+def _icon_map() -> dict[str, str]:
+    return {
+        "PASS": color("✓", BRIGHT_GREEN),
+        "FAIL": color("✕", BRIGHT_RED),
+        "ERROR": color("✕", BRIGHT_RED),
+        "SKIP": color("↷", BRIGHT_YELLOW),
+        "XF": color("≒", BRIGHT_YELLOW),
+        "XPASS": color("★", BRIGHT_CYAN),
+    }
+
+
+def _format_badge(status: str, status_colors: dict[str, str]) -> str:
+    clr = status_colors.get(status, CYAN)
+    if status == "PASS":
+        return f"{BG_GREEN}{FG_WHITE}{BOLD} {status} {RESET}"
+    if status == "FAIL":
+        return f"{BG_RED}{FG_WHITE}{BOLD} {status} {RESET}"
+    return color(f" {status} ", clr)
+
+
+def _format_module_display(display: str) -> str:
+    path = Path(display)
+    dimmed = str(path.parent) if path.parent != Path(".") else ""
+    filename = path.name
+    if dimmed:
+        return f"{DIM}{dimmed}/{RESET}{color(filename, BOLD)}"
+    return color(filename, BOLD)
 
 
 class JestStyleTestRunner(unittest.TextTestRunner):
@@ -358,3 +379,10 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         self.stream.writeln(f"  Test Suites: {suite_summary}")
         self.stream.writeln(f"  Tests:       {test_summary}")
         self.stream.writeln(f"  Time:        {duration:.2f}s")
+
+    def _print_group(self, group: ClassGroup, detail_colors: dict[str, str], icon_map: dict[str, str]) -> None:
+        description = group.doc_title or group.name
+        class_line = f"  {color('›', BRIGHT_CYAN)} {description}"
+        self.stream.writeln(class_line)
+        for detail in group.tests:
+            self._print_detail(detail, detail_colors, icon_map)

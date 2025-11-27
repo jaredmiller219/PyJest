@@ -158,33 +158,10 @@ def _module_name_from_path(path: Path) -> str:
 
 
 def _load_targets(loader: unittest.TestLoader, targets: Sequence[str], pattern: str) -> unittest.TestSuite:
-    if not targets:
-        tests_dir = Path("tests")
-        if tests_dir.exists():
-            return _load_directory_suite(loader, tests_dir, pattern)
-        raise SystemExit("no pyjest file(s) exists")
-
+    targets = _default_targets_if_empty(targets)
     suites: list[unittest.TestSuite] = []
     for target in targets:
-        path = Path(target)
-        if path.is_dir():
-            if not _has_test_files(path):
-                raise SystemExit(
-                    f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files."
-                )
-            suites.append(_load_directory_suite(loader, path, pattern))
-            continue
-        if path.is_file():
-            if path.suffix not in {".py", ".pyjest"}:
-                raise SystemExit(f"pyjest can only run Python files: '{path}'")
-            if path.suffix == ".pyjest":
-                suites.append(_load_tests_from_pyjest_file(loader, path))
-                continue
-            if path.suffix == ".py":
-                raise SystemExit(
-                    f"'{path}' is not a .pyjest file. Rename it to end with .pyjest or pass an importable module path."
-                )
-        suites.append(loader.loadTestsFromName(target))
+        suites.append(_load_single_target(loader, target, pattern))
     return unittest.TestSuite(suites)
 
 
@@ -194,3 +171,37 @@ def _has_test_files(path: Path) -> bool:
             if name.endswith(".py") or name.endswith(".pyjest"):
                 return True
     return False
+
+
+def _default_targets_if_empty(targets: Sequence[str]) -> Sequence[str]:
+    if targets:
+        return targets
+    tests_dir = Path("tests")
+    if tests_dir.exists():
+        return (str(tests_dir),)
+    raise SystemExit("no pyjest file(s) exists")
+
+
+def _load_single_target(loader: unittest.TestLoader, target: str, pattern: str) -> unittest.TestSuite:
+    path = Path(target)
+    if path.is_dir():
+        return _load_directory_target(loader, path, pattern)
+    if path.is_file():
+        return _load_file_target(loader, path)
+    return loader.loadTestsFromName(target)
+
+
+def _load_directory_target(loader: unittest.TestLoader, path: Path, pattern: str) -> unittest.TestSuite:
+    if not _has_test_files(path):
+        raise SystemExit(f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files.")
+    return _load_directory_suite(loader, path, pattern)
+
+
+def _load_file_target(loader: unittest.TestLoader, path: Path) -> unittest.TestSuite:
+    if path.suffix not in {".py", ".pyjest"}:
+        raise SystemExit(f"pyjest can only run Python files: '{path}'")
+    if path.suffix == ".pyjest":
+        return _load_tests_from_pyjest_file(loader, path)
+    raise SystemExit(
+        f"'{path}' is not a .pyjest file. Rename it to end with .pyjest or pass an importable module path."
+    )

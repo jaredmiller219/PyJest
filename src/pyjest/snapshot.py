@@ -47,16 +47,7 @@ class SnapshotStore:
     def _load_file(self, path: Path) -> Dict[str, Any]:
         if path in self._cache:
             return self._cache[path]
-        if not path.exists():
-            data: Dict[str, Any] = {}
-            self._cache[path] = data
-            return data
-        try:
-            content = json.loads(path.read_text())
-        except json.JSONDecodeError:
-            content = {}
-        if not isinstance(content, dict):
-            content = {}
+        content = self._read_snapshot_file(path)
         self._cache[path] = content
         return content
 
@@ -71,24 +62,44 @@ class SnapshotStore:
         file_path = _snapshot_file_for_module(self.root, module_name)
         snapshots = self._load_file(file_path)
         if snap_name not in snapshots:
-            if not self.update:
-                raise AssertionError(
-                    f"Snapshot '{snap_name}' not found. Re-run with --updateSnapshot to create it."
-                )
+            self._handle_missing_snapshot(snap_name, snapshots, file_path, value)
+            return
+        self._compare_or_update_snapshot(snap_name, snapshots, file_path, value)
+
+    def _handle_missing_snapshot(self, snap_name: str, snapshots: Dict[str, Any], file_path: Path, value: Any) -> None:
+        if not self.update:
+            raise AssertionError(
+                f"Snapshot '{snap_name}' not found. Re-run with --updateSnapshot to create it."
+            )
+        snapshots[snap_name] = value
+        self._save_file(file_path, snapshots)
+
+    def _compare_or_update_snapshot(
+        self, snap_name: str, snapshots: Dict[str, Any], file_path: Path, value: Any
+    ) -> None:
+        expected = snapshots[snap_name]
+        if expected == value:
+            return
+        if self.update:
             snapshots[snap_name] = value
             self._save_file(file_path, snapshots)
             return
-        expected = snapshots[snap_name]
-        if expected != value:
-            if self.update:
-                snapshots[snap_name] = value
-                self._save_file(file_path, snapshots)
-                return
-            raise AssertionError(
-                f"Snapshot mismatch for '{snap_name}'. "
-                "Re-run with --updateSnapshot to accept new output.\n"
-                f"Expected: {expected!r}\nReceived: {value!r}"
-            )
+        raise AssertionError(
+            f"Snapshot mismatch for '{snap_name}'. "
+            "Re-run with --updateSnapshot to accept new output.\n"
+            f"Expected: {expected!r}\nReceived: {value!r}"
+        )
+
+    def _read_snapshot_file(self, path: Path) -> Dict[str, Any]:
+        if not path.exists():
+            return {}
+        try:
+            content = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(content, dict):
+            return {}
+        return content
 
 
 STORE = SnapshotStore()

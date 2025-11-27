@@ -11,6 +11,15 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the test suite with Jest-style output."
     )
+    _add_watch_args(parser)
+    _add_target_args(parser)
+    _add_execution_args(parser)
+    _add_coverage_args(parser)
+    parser.add_argument("--buffer", action="store_true", help="Buffer stdout/stderr during tests")
+    return parser.parse_args(argv)
+
+
+def _add_watch_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--watch",
         action="store_true",
@@ -34,6 +43,14 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="In watch mode, prioritize rerunning previously failing modules",
     )
     parser.add_argument(
+        "--onlyChanged",
+        action="store_true",
+        help="In watch mode, re-run only tests affected by changed files",
+    )
+
+
+def _add_target_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
         "--root",
         type=Path,
         default=None,
@@ -50,6 +67,9 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default="test*.py",
         help="Filename pattern when discovering directories (default: %(default)s)",
     )
+
+
+def _add_execution_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--failfast", action="store_true", help="Stop on first failure")
     parser.add_argument("--bail", action="store_true", help="Alias for --failfast")
     parser.add_argument(
@@ -64,15 +84,13 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Maximum workers (reserved; currently must be 1)",
     )
     parser.add_argument(
-        "--onlyChanged",
-        action="store_true",
-        help="In watch mode, re-run only tests affected by changed files",
-    )
-    parser.add_argument(
         "--updateSnapshot",
         action="store_true",
         help="Parse snapshot update flag (reserved for future snapshot support)",
     )
+
+
+def _add_coverage_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--coverage",
         dest="coverage",
@@ -101,5 +119,3 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Fail if total coverage percentage is below this value",
     )
     parser.set_defaults(coverage=False)
-    parser.add_argument("--buffer", action="store_true", help="Buffer stdout/stderr during tests")
-    return parser.parse_args(argv)

@@ -17,24 +17,9 @@ def _import_graph_from_modules(modules: Iterable[str]) -> Mapping[str, set[str]]
         module = sys.modules.get(name)
         if not module or not getattr(module, "__file__", None):
             continue
-        deps: set[str] = set()
-        try:
-            with open(module.__file__, "r") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if line.startswith("import "):
-                        parts = line.replace("import", "").strip().split(",")
-                        for part in parts:
-                            dep = part.strip().split(" ")[0]
-                            if dep:
-                                deps.add(dep.split(".")[0])
-                    elif line.startswith("from "):
-                        dep = line.split(" ")[1]
-                        if dep:
-                            deps.add(dep.split(".")[0])
-        except OSError:
-            continue
-        graph[name] = deps
+        deps = _read_imports(module.__file__)
+        if deps:
+            graph[name] = deps
     return graph
 
 
@@ -52,3 +37,30 @@ def infer_targets_from_changes(changed: set[Path], default_targets: Sequence[str
             if any(dep in changed_modules for dep in deps):
                 targets.add(mod)
     return list(targets) or list(default_targets)
+
+
+def _read_imports(path_str: str) -> set[str]:
+    deps: set[str] = set()
+    try:
+        with open(path_str, "r") as fh:
+            for line in fh:
+                line = line.strip()
+                deps.update(_parse_import_line(line))
+    except OSError:
+        return set()
+    return deps
+
+
+def _parse_import_line(line: str) -> set[str]:
+    deps: set[str] = set()
+    if line.startswith("import "):
+        parts = line.replace("import", "").strip().split(",")
+        for part in parts:
+            dep = part.strip().split(" ")[0]
+            if dep:
+                deps.add(dep.split(".")[0])
+    if line.startswith("from "):
+        dep = line.split(" ")[1]
+        if dep:
+            deps.add(dep.split(".")[0])
+    return deps

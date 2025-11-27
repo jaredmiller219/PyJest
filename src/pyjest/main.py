@@ -14,16 +14,19 @@ __all__ = ["expect", "expect_async", "mark_pyjest", "marked_modules", "main"]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    args = _prepare_args(argv)
+    prepare_environment(args)
+    return run_once(args) if not args.watch else run_watch(args)
+
+
+def _prepare_args(argv: Sequence[str] | None) -> object:
     args = parse_args(argv or sys.argv[1:])
     args.failfast = args.failfast or args.bail
     if args.maxWorkers < 1:
         raise SystemExit("--maxWorkers must be >= 1")
     if args.coverage_html is not None or args.coverage_threshold is not None:
         args.coverage = True
-    prepare_environment(args)
-    if not args.watch:
-        return run_once(args)
-    return run_watch(args)
+    return args
 
 
 if __name__ == "__main__":

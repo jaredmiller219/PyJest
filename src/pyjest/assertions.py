@@ -11,19 +11,21 @@ from typing import Any, Iterable, Mapping
 
 from .snapshot import STORE
 
+
 def _pretty(value: Any) -> str:
     return pprint.pformat(value, width=80, compact=True)
 
 
 def _diff(expected: Any, actual: Any) -> str:
-    if isinstance(expected, str) and isinstance(actual, str):
-        left = expected.splitlines()
-        right = actual.splitlines()
-    else:
-        left = _pretty(expected).splitlines()
-        right = _pretty(actual).splitlines()
+    left, right = _normalize_diff_inputs(expected, actual)
     diff = difflib.ndiff(left, right)
     return "\n".join(diff)
+
+
+def _normalize_diff_inputs(expected: Any, actual: Any) -> tuple[list[str], list[str]]:
+    if isinstance(expected, str) and isinstance(actual, str):
+        return expected.splitlines(), actual.splitlines()
+    return _pretty(expected).splitlines(), _pretty(actual).splitlines()
 
 
 def expect(value: Any) -> "Expectation":
@@ -100,8 +102,7 @@ class Expectation:
             self._fail(f"Missing keys: {_pretty(missing)} in {_pretty(self.value)}")
 
     def to_raise(self, exc_type: type[BaseException] = Exception, match: str | None = None) -> None:
-        if not callable(self.value):
-            self._fail("to_raise requires a callable value")
+        self._assert_callable()
         try:
             self.value()
         except exc_type as exc:
@@ -115,6 +116,10 @@ class Expectation:
 
     def to_match_snapshot(self, name: str | None = None) -> None:
         STORE.assert_match(self.value, name=name)
+
+    def _assert_callable(self) -> None:
+        if not callable(self.value):
+            self._fail("to_raise requires a callable value")
 
 
 @dataclass
