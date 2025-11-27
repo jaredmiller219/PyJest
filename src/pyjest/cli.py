@@ -29,6 +29,11 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Extra debounce delay after a change is detected (default: %(default)s)",
     )
     parser.add_argument(
+        "--run-failures-first",
+        action="store_true",
+        help="In watch mode, prioritize rerunning previously failing modules",
+    )
+    parser.add_argument(
         "--root",
         type=Path,
         default=None,

@@ -30,6 +30,7 @@ automatically picks up `.pyjest` files as part of discovery).
 - `--coverage [--coverage-html DIR] [--coverage-threshold PCT]`: optional coverage.py integration; write HTML to `coverage_html` by default when flag is present.
 - `--maxWorkers N`: basic parallel run across multiple targets (experimental).
 - `--watch-debounce SECONDS`: extra debounce delay after change detection (default 0.2s).
+- `--run-failures-first`: in watch mode, rerun failing modules before falling back to other targets.
 
 ### Expect-style assertions
 
