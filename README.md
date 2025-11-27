@@ -27,3 +27,21 @@ automatically picks up `.pyjest` files as part of discovery).
 - `--runInBand`: explicit serial execution (default for now).
 - `--maxWorkers 1`: parsed for future parallelism; currently must be 1.
 - `--updateSnapshot`: accepted for future snapshot support.
+
+### Expect-style assertions
+
+PyJest ships lightweight matchers:
+
+```python
+from pyjest.assertions import expect, expect_async
+
+expect({"a": 1, "b": 2}).to_have_keys(["a"])
+expect("hello world").to_match(r"hello")
+expect(lambda: (_ for _ in ()).throw(ValueError("boom"))).to_raise(ValueError, "boom")
+
+# Async
+async def fetch():
+    return {"ok": True}
+
+await expect_async(fetch()).to_resolve_to({"ok": True})
+```

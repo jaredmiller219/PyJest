@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
+from .assertions import expect, expect_async
+
 
 PROJECT_ROOT = Path.cwd()
 
