@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import io
+import builtins
+import importlib
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -38,8 +42,51 @@ def _import_coverage():
     except ImportError as exc:  # pragma: no cover - exercised in CLI usage
         raise SystemExit("coverage.py is required for --coverage. Install 'coverage' first.") from exc
     except Exception as exc:  # pragma: no cover - defensive for broken installs
+        fallback = _retry_without_c_extension(exc)
+        if fallback:
+            return fallback
         raise SystemExit(f"coverage.py is installed but failed to import: {exc}") from exc
     return coverage
+
+
+def _retry_without_c_extension(exc: Exception):
+    """Try to import coverage.py without its C extension when it is broken.
+
+    Some Python prereleases (for example 3.13 alphas) can load an incompatible
+    ``coverage.tracer`` binary wheel, which raises SystemError on import. In
+    that case, fall back to the slower pure-Python tracer so ``--coverage`` can
+    still run instead of aborting.
+    """
+
+    if "coverage.tracer" not in str(exc):
+        return None
+
+    # Remove any half-imported modules from sys.modules so the retry starts clean.
+    sys.modules.pop("coverage", None)
+    sys.modules.pop("coverage.tracer", None)
+
+    # Force coverage to select the pure-Python tracer instead of the C extension.
+    os.environ.setdefault("COVERAGE_CORE", "pytrace")
+
+    real_import = builtins.__import__
+
+    def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "coverage.tracer":
+            try:
+                return real_import(name, globals, locals, fromlist, level)
+            except Exception as tracer_exc:
+                # Convert any failure to ImportError so coverage falls back.
+                raise ImportError(tracer_exc) from tracer_exc
+        return real_import(name, globals, locals, fromlist, level)
+
+    try:
+        builtins.__import__ = _guarded_import
+        return importlib.import_module("coverage")
+    except Exception:
+        # If the retry also fails, let the original error surface.
+        return None
+    finally:
+        builtins.__import__ = real_import
 
 
 def _write_text_report(cov: Any) -> float:
