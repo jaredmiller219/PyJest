@@ -38,7 +38,7 @@ as needed:
 - `--maxWorkers N`: basic parallel run across multiple targets (experimental).
 - `--watch-debounce SECONDS`: extra debounce delay after change detection (default 0.2s).
 - `--run-failures-first`: in watch mode, rerun failing modules before falling back to other targets.
-- Progress: default inline ✓/✕/↷ glyphs now begin with a framed “Progress” banner, drop colored count panels with test #, and add mini stacked bars every few tests; add `--buffer` to switch to a live status line with spinner, elapsed time, test index, and pass/fail/skip counts.
+- Progress: default inline ✓/✕/↷ glyphs start with a framed banner + legend, rotate through stylized icons, drop colored count panels with test #, show a recent-status sparkline/last test label, and add mini stacked bars; add `--buffer` to switch to a live status line with spinner, elapsed time, test index, and pass/fail/skip counts.
 - `--report-format console json tap junit`: emit machine-readable reports alongside console output.
 - `--report-modules`: print per-module/class breakdowns.
 - `--report-suite-table`: print compact per-suite table.

@@ -106,6 +106,9 @@ class JestStyleResult(unittest.TestResult):
         self._status_line_len = 0
         self._inline_progress_total = 0
         self._tests_seen = 0
+        self._last_test_label = ""
+        self._recent_statuses: list[str] = []
+        self._status_cycle: Counter[str] = Counter()
         self.spinner_enabled: bool = True
 
     @property
@@ -122,6 +125,13 @@ class JestStyleResult(unittest.TestResult):
         if not self._progress_started:
             return
         self._progress_counts[status] += 1
+        if self._current_test:
+            module = self._current_test.__class__.__module__
+            title = _format_test_title(self._current_test)
+            self._last_test_label = f"{module}::{title}"
+        self._recent_statuses.append(status)
+        if len(self._recent_statuses) > 16:
+            self._recent_statuses = self._recent_statuses[-16:]
         if self.spinner_enabled:
             self._write_status_line()
         else:
@@ -156,7 +166,7 @@ class JestStyleResult(unittest.TestResult):
         self.stream.flush()
 
     def _write_progress_icon(self, status: str) -> None:
-        icon = _icon_map().get(status, color("•", CYAN))
+        icon = self._progress_icon_variant(status)
         self._inline_progress_total += 1
         if self._inline_progress_total == 1:
             banner = (
@@ -166,19 +176,28 @@ class JestStyleResult(unittest.TestResult):
                 + "\n"
                 + color("╰──────────────────────────╯", BRIGHT_CYAN)
             )
-            self.stream.write(f"\n{banner}\n ")
+            legend = (
+                f"{color('✓', BRIGHT_GREEN)} pass  "
+                f"{color('✕', BRIGHT_RED)} fail  "
+                f"{color('↷', BRIGHT_YELLOW)} skip"
+            )
+            self.stream.write(f"\n{banner}\n Legend: {legend}\n ")
         self.stream.write(icon)
         if self._inline_progress_total % 8 == 0:
             self.stream.write(" ")
+        if self._inline_progress_total % 12 == 0:
+            self.stream.write(color("━", DIM))
         if self._inline_progress_total % 32 == 0:
             summary = (
                 f"[{color('✓', BRIGHT_GREEN)} {self._progress_counts.get('PASS', 0) + self._progress_counts.get('XPASS', 0)} "
                 f"{color('✕', BRIGHT_RED)} {self._progress_counts.get('FAIL', 0) + self._progress_counts.get('ERROR', 0)} "
                 f"{color('↷', BRIGHT_YELLOW)} {self._progress_counts.get('SKIP', 0) + self._progress_counts.get('XF', 0)} "
-                f"{color('#', CYAN)} {self._tests_seen}]"
+                f"{color('#', CYAN)} {self._tests_seen} tests]"
             )
             border = "─" * max(len(summary) - 2, 6)
-            self.stream.write(f"\n┌{border}┐\n {summary}\n└{border}┘\n ")
+            spark = "".join(_icon_map().get(s, "•") for s in self._recent_statuses)
+            last_line = f"last: {color(self._last_test_label or 'n/a', DIM)}"
+            self.stream.write(f"\n┌{border}┐\n {summary}\n recent: {spark}\n {last_line}\n└{border}┘\n ")
         if self._inline_progress_total % 16 == 0:
             bar = self._progress_bar()
             self.stream.write(f"\n {bar}\n ")
@@ -198,6 +217,21 @@ class JestStyleResult(unittest.TestResult):
             + color("█" * max(skipped_width, 0), BRIGHT_YELLOW)
         )
         return f"[{bar}]"
+
+    def _progress_icon_variant(self, status: str) -> str:
+        palette = {
+            "PASS": ["✓", "✔", "▰", "▮"],
+            "XPASS": ["★", "✦", "✶", "✸"],
+            "FAIL": ["✕", "✖", "▱", "▯"],
+            "ERROR": ["✕", "✖", "▱", "▯"],
+            "SKIP": ["↷", "↻", "⋯", "·"],
+            "XF": ["≒", "≈", "~", "⋆"],
+        }
+        icons = palette.get(status, ["•"])
+        idx = self._status_cycle[status] % len(icons)
+        self._status_cycle[status] += 1
+        base = icons[idx]
+        return _icon_map().get(status, color(base, CYAN)) if status in _icon_map() else base
 
     def startTest(self, test):  # type: ignore[override]
         self._start_times[test] = time.perf_counter()
