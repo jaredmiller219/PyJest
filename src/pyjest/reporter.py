@@ -109,6 +109,10 @@ class JestStyleResult(unittest.TestResult):
         self._last_test_label = ""
         self._recent_statuses: list[str] = []
         self._status_cycle: Counter[str] = Counter()
+        self._inline_row_count = 0
+        self._inline_border = "═" * 30
+        self._inline_row_width = len(self._inline_border) - 2  # interior width
+        self._inline_row_pos = 0
         self.spinner_enabled: bool = True
 
     @property
@@ -166,72 +170,70 @@ class JestStyleResult(unittest.TestResult):
         self.stream.flush()
 
     def _write_progress_icon(self, status: str) -> None:
-        icon = self._progress_icon_variant(status)
+        icon = _icon_map().get(status, color("•", CYAN))
         self._inline_progress_total += 1
         if self._inline_progress_total == 1:
-            banner = (
-                color("╭──────────────────────────╮", BRIGHT_CYAN)
-                + "\n"
-                + color("│        Progress          │", BRIGHT_CYAN)
-                + "\n"
-                + color("╰──────────────────────────╯", BRIGHT_CYAN)
+            legend_plain = "✓ pass  ✕ fail  ↷ skip"
+            border_len = len(self._inline_border)
+            left_pad = max(0, (border_len - len(legend_plain)) // 2)
+            right_pad = max(0, border_len - len(legend_plain) - left_pad)
+            legend_colored = (
+                " " * left_pad
+                + color("✓", BRIGHT_GREEN)
+                + " pass  "
+                + color("✕", BRIGHT_RED)
+                + " fail  "
+                + color("↷", BRIGHT_YELLOW)
+                + " skip"
+                + " " * right_pad
             )
-            legend = (
-                f"{color('✓', BRIGHT_GREEN)} pass  "
-                f"{color('✕', BRIGHT_RED)} fail  "
-                f"{color('↷', BRIGHT_YELLOW)} skip"
+            header = (
+                f"\n{color('╔' + self._inline_border + '╗', BRIGHT_CYAN)}\n"
+                f"{color('║' + ' Progress '.center(len(self._inline_border)) + '║', BRIGHT_CYAN)}\n"
+                f"{color('╠' + ' Legend '.center(len(self._inline_border), '═') + '╣', BRIGHT_CYAN)}\n"
+                f"{color('║', BRIGHT_CYAN)}{legend_colored}{color('║', BRIGHT_CYAN)}\n"
+                f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n"
             )
-            self.stream.write(f"\n{banner}\n Legend: {legend}\n ")
+            self.stream.write(header)
+        if self._inline_row_pos == 0:
+            self.stream.write(color("║ ", BRIGHT_CYAN))
         self.stream.write(icon)
-        if self._inline_progress_total % 8 == 0:
-            self.stream.write(" ")
-        if self._inline_progress_total % 12 == 0:
-            self.stream.write(color("━", DIM))
-        if self._inline_progress_total % 32 == 0:
-            summary = (
-                f"[{color('✓', BRIGHT_GREEN)} {self._progress_counts.get('PASS', 0) + self._progress_counts.get('XPASS', 0)} "
-                f"{color('✕', BRIGHT_RED)} {self._progress_counts.get('FAIL', 0) + self._progress_counts.get('ERROR', 0)} "
-                f"{color('↷', BRIGHT_YELLOW)} {self._progress_counts.get('SKIP', 0) + self._progress_counts.get('XF', 0)} "
-                f"{color('#', CYAN)} {self._tests_seen} tests]"
-            )
-            border = "─" * max(len(summary) - 2, 6)
-            spark = "".join(_icon_map().get(s, "•") for s in self._recent_statuses)
-            last_line = f"last: {color(self._last_test_label or 'n/a', DIM)}"
-            self.stream.write(f"\n┌{border}┐\n {summary}\n recent: {spark}\n {last_line}\n└{border}┘\n ")
-        if self._inline_progress_total % 16 == 0:
-            bar = self._progress_bar()
-            self.stream.write(f"\n {bar}\n ")
+        self._inline_row_pos += 1
+        self._inline_row_count += 1
+        if self._inline_row_pos >= self._inline_row_width:
+            self._close_inline_row()
         self.stream.flush()
 
-    def _progress_bar(self, width: int = 20) -> str:
-        total = sum(self._progress_counts.values()) or 1
-        passes = self._progress_counts.get("PASS", 0) + self._progress_counts.get("XPASS", 0)
-        fails = self._progress_counts.get("FAIL", 0) + self._progress_counts.get("ERROR", 0)
-        skips = self._progress_counts.get("SKIP", 0) + self._progress_counts.get("XF", 0)
-        passed_width = int((passes / total) * width)
-        failed_width = int((fails / total) * width)
-        skipped_width = width - passed_width - failed_width
-        bar = (
-            color("█" * passed_width, BRIGHT_GREEN)
-            + color("█" * failed_width, BRIGHT_RED)
-            + color("█" * max(skipped_width, 0), BRIGHT_YELLOW)
-        )
-        return f"[{bar}]"
+    def close_progress_block(self) -> None:
+        if self.spinner_enabled or not self._inline_progress_total:
+            return
+        if self._inline_row_pos:
+            padding = max(0, self._inline_row_width - self._inline_row_pos)
+            self.stream.write(" " * padding + color(" ║", BRIGHT_CYAN) + "\n")
+        self.stream.write(f"{color('╚' + self._inline_border + '╝', BRIGHT_CYAN)}\n")
+        self.stream.flush()
 
-    def _progress_icon_variant(self, status: str) -> str:
-        palette = {
-            "PASS": ["✓", "✔", "▰", "▮"],
-            "XPASS": ["★", "✦", "✶", "✸"],
-            "FAIL": ["✕", "✖", "▱", "▯"],
-            "ERROR": ["✕", "✖", "▱", "▯"],
-            "SKIP": ["↷", "↻", "⋯", "·"],
-            "XF": ["≒", "≈", "~", "⋆"],
-        }
-        icons = palette.get(status, ["•"])
-        idx = self._status_cycle[status] % len(icons)
-        self._status_cycle[status] += 1
-        base = icons[idx]
-        return _icon_map().get(status, color(base, CYAN)) if status in _icon_map() else base
+    def _close_inline_row(self) -> None:
+        padding = max(0, self._inline_row_width - self._inline_row_pos)
+        self.stream.write(" " * padding + color(" ║", BRIGHT_CYAN) + "\n")
+        self._write_progress_card()
+        self.stream.write(f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n")
+        self._inline_row_pos = 0
+        self.stream.write(color("║ ", BRIGHT_CYAN))
+
+    def _write_progress_card(self) -> None:
+        summary = (
+            f"{color('✓', BRIGHT_GREEN)} {self._progress_counts.get('PASS', 0) + self._progress_counts.get('XPASS', 0):<3}"
+            f"{color('✕', BRIGHT_RED)} {self._progress_counts.get('FAIL', 0) + self._progress_counts.get('ERROR', 0):<3}"
+            f"{color('↷', BRIGHT_YELLOW)} {self._progress_counts.get('SKIP', 0) + self._progress_counts.get('XF', 0):<3}"
+            f"{color('#', CYAN)} {self._tests_seen:<3}"
+        )
+        label = (self._last_test_label or "n/a")[:24]
+        trail = "".join(_icon_map().get(s, "•") for s in self._recent_statuses[-20:])
+        self.stream.write(f"{color('║ stats:', BRIGHT_CYAN)} {summary:<20}{color('║', BRIGHT_CYAN)}\n")
+        self.stream.write(f"{color('║ trail:', BRIGHT_CYAN)} {trail:<20}{color('║', BRIGHT_CYAN)}\n")
+        self.stream.write(f"{color('║ last:', BRIGHT_CYAN)}  {color(label, DIM):<20}{color('║', BRIGHT_CYAN)}\n")
+
 
     def startTest(self, test):  # type: ignore[override]
         self._start_times[test] = time.perf_counter()
@@ -536,6 +538,7 @@ class JestStyleTestRunner(unittest.TextTestRunner):
             test(result)
         finally:
             result.stopTestRun()
+        result.close_progress_block()
 
         # Drop a newline after the inline progress symbols.
         if self.stream is not None:
