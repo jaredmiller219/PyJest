@@ -113,7 +113,8 @@ class JestStyleResult(unittest.TestResult):
         self._inline_border = "═" * 30
         self._inline_row_width = len(self._inline_border) - 2  # interior width
         self._inline_row_pos = 0
-        self.spinner_enabled: bool = True
+        self._inline_header_drawn = False
+        self.progress_fancy_level: int = 0
 
     @property
     def successes(self) -> Sequence[unittest.case.TestCase]:
@@ -124,6 +125,8 @@ class JestStyleResult(unittest.TestResult):
         self.stream.writeln("Running tests...")
         self._progress_started = True
         self._progress_start = time.perf_counter()
+        if not self.spinner_enabled and self.progress_fancy_level >= 1:
+            self._write_inline_header()
 
     def _record_progress(self, status: str) -> None:
         if not self._progress_started:
@@ -170,31 +173,15 @@ class JestStyleResult(unittest.TestResult):
         self.stream.flush()
 
     def _write_progress_icon(self, status: str) -> None:
+        self._write_inline_header()
         icon = _icon_map().get(status, color("•", CYAN))
+        # Level 0: basic inline checkmarks with no frame.
+        if self.progress_fancy_level == 0:
+            self.stream.write(icon)
+            self._inline_progress_total += 1
+            self.stream.flush()
+            return
         self._inline_progress_total += 1
-        if self._inline_progress_total == 1:
-            legend_plain = "✓ pass  ✕ fail  ↷ skip"
-            border_len = len(self._inline_border)
-            left_pad = max(0, (border_len - len(legend_plain)) // 2)
-            right_pad = max(0, border_len - len(legend_plain) - left_pad)
-            legend_colored = (
-                " " * left_pad
-                + color("✓", BRIGHT_GREEN)
-                + " pass  "
-                + color("✕", BRIGHT_RED)
-                + " fail  "
-                + color("↷", BRIGHT_YELLOW)
-                + " skip"
-                + " " * right_pad
-            )
-            header = (
-                f"\n{color('╔' + self._inline_border + '╗', BRIGHT_CYAN)}\n"
-                f"{color('║' + ' Progress '.center(len(self._inline_border)) + '║', BRIGHT_CYAN)}\n"
-                f"{color('╠' + ' Legend '.center(len(self._inline_border), '═') + '╣', BRIGHT_CYAN)}\n"
-                f"{color('║', BRIGHT_CYAN)}{legend_colored}{color('║', BRIGHT_CYAN)}\n"
-                f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n"
-            )
-            self.stream.write(header)
         if self._inline_row_pos == 0:
             self.stream.write(color("║ ", BRIGHT_CYAN))
         self.stream.write(icon)
@@ -205,19 +192,26 @@ class JestStyleResult(unittest.TestResult):
         self.stream.flush()
 
     def close_progress_block(self) -> None:
-        if self.spinner_enabled or not self._inline_progress_total:
+        if self.spinner_enabled or (not self._inline_progress_total and not self._inline_header_drawn):
             return
-        if self._inline_row_pos:
-            padding = max(0, self._inline_row_width - self._inline_row_pos)
-            self.stream.write(" " * padding + color(" ║", BRIGHT_CYAN) + "\n")
-        self.stream.write(f"{color('╚' + self._inline_border + '╝', BRIGHT_CYAN)}\n")
+        if self.progress_fancy_level >= 1:
+            if self._inline_row_pos:
+                padding = max(0, self._inline_row_width - self._inline_row_pos)
+                self.stream.write(" " * padding + color(" ║", BRIGHT_CYAN) + "\n")
+                if self.progress_fancy_level >= 2:
+                    self._write_progress_card()
+                    self.stream.write(f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n")
+                    self._inline_row_pos = 0
+            self.stream.write(f"{color('╚' + self._inline_border + '╝', BRIGHT_CYAN)}\n")
         self.stream.flush()
 
     def _close_inline_row(self) -> None:
         padding = max(0, self._inline_row_width - self._inline_row_pos)
         self.stream.write(" " * padding + color(" ║", BRIGHT_CYAN) + "\n")
-        self._write_progress_card()
-        self.stream.write(f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n")
+        if self.progress_fancy_level >= 2:
+            self._write_progress_card()
+        if self.progress_fancy_level >= 1:
+            self.stream.write(f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n")
         self._inline_row_pos = 0
         self.stream.write(color("║ ", BRIGHT_CYAN))
 
@@ -233,6 +227,33 @@ class JestStyleResult(unittest.TestResult):
         self.stream.write(f"{color('║ stats:', BRIGHT_CYAN)} {summary:<20}{color('║', BRIGHT_CYAN)}\n")
         self.stream.write(f"{color('║ trail:', BRIGHT_CYAN)} {trail:<20}{color('║', BRIGHT_CYAN)}\n")
         self.stream.write(f"{color('║ last:', BRIGHT_CYAN)}  {color(label, DIM):<20}{color('║', BRIGHT_CYAN)}\n")
+
+    def _write_inline_header(self) -> None:
+        if self._inline_header_drawn or self.spinner_enabled or self.progress_fancy_level < 1:
+            return
+        legend_plain = "✓ pass  ✕ fail  ↷ skip"
+        border_len = len(self._inline_border)
+        left_pad = max(0, (border_len - len(legend_plain)) // 2)
+        right_pad = max(0, border_len - len(legend_plain) - left_pad)
+        legend_colored = (
+            " " * left_pad
+            + color("✓", BRIGHT_GREEN)
+            + " pass  "
+            + color("✕", BRIGHT_RED)
+            + " fail  "
+            + color("↷", BRIGHT_YELLOW)
+            + " skip"
+            + " " * right_pad
+        )
+        header = (
+            f"\n{color('╔' + self._inline_border + '╗', BRIGHT_CYAN)}\n"
+            f"{color('║' + ' Progress '.center(len(self._inline_border)) + '║', BRIGHT_CYAN)}\n"
+            f"{color('╠' + ' Legend '.center(len(self._inline_border), '═') + '╣', BRIGHT_CYAN)}\n"
+            f"{color('║', BRIGHT_CYAN)}{legend_colored}{color('║', BRIGHT_CYAN)}\n"
+            f"{color('╠' + self._inline_border + '╣', BRIGHT_CYAN)}\n"
+        )
+        self.stream.write(header)
+        self._inline_header_drawn = True
 
 
     def startTest(self, test):  # type: ignore[override]
@@ -515,12 +536,14 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         report_modules: bool = False,
         report_suite_table: bool = False,
         report_outliers: bool = False,
+        progress_fancy: int = 0,
         **kwargs,
     ):
         self.spinner = spinner
         self._report_modules = report_modules
         self._report_suite_table = report_suite_table
         self._report_outliers = report_outliers
+        self.progress_fancy = progress_fancy
         super().__init__(verbosity=2, **kwargs)
 
     def run(self, test):  # type: ignore[override]
@@ -531,6 +554,7 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         result.report_modules = self._report_modules
         result.report_suite_table = self._report_suite_table
         result.report_outliers = self._report_outliers
+        result.progress_fancy_level = getattr(self, "progress_fancy", 0)
         start_time = time.perf_counter()
 
         result.startTestRun()

@@ -96,7 +96,8 @@ def _finish_coverage(cov, html_dir: str | None, show_bars: bool) -> float | None
 
 
 def _run_suite_with_runner(suite: unittest.TestSuite, stream, args):
-    spinner = bool(args.buffer)
+    fancy_level = getattr(args, "progress_fancy", 0)
+    spinner = fancy_level == 1  # one-line stats mode
     runner = JestStyleTestRunner(
         failfast=args.failfast,
         buffer=args.buffer,
@@ -105,6 +106,7 @@ def _run_suite_with_runner(suite: unittest.TestSuite, stream, args):
         report_modules=args.report_modules,
         report_suite_table=args.report_suite_table,
         report_outliers=args.report_outliers,
+        progress_fancy=fancy_level,
     )
     return runner.run(suite)
 

@@ -120,6 +120,21 @@ def _add_execution_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Show per-file coverage bars/sparklines when reporting coverage",
     )
+    parser.add_argument(
+        "--progress-fancy",
+        type=int,
+        choices=[0, 1, 2],
+        default=0,
+        metavar="{0,1,2}",
+        help="Fancy progress level: 0 = basic checkmarks, 1 = compact one-line stats, 2 = framed with stats",
+    )
+    parser.add_argument(
+        "--fancy-progress",
+        action="store_const",
+        const=2,
+        dest="progress_fancy",
+        help="Alias for --progress-fancy=2 (framed with stats)",
+    )
 
 
 def _add_coverage_args(parser: argparse.ArgumentParser) -> None:
