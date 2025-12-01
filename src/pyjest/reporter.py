@@ -422,6 +422,8 @@ class JestStyleResult(unittest.TestResult):
             self._print_detail(detail, detail_colors, icon_map)
 
     def _print_detail(self, detail: TestDetail, detail_colors: dict[str, str], icon_map: dict[str, str]) -> None:
+        if not detail.name:
+            return
         icon = icon_map.get(detail.status, color("•", CYAN))
         duration_ms = f"{detail.duration * 1000:.0f} ms"
         status_color = detail_colors.get(detail.status, CYAN)
@@ -473,6 +475,8 @@ class JestStyleResult(unittest.TestResult):
         duration = _format_duration(detail.duration)
         location = f"{detail.module or ''}.{detail.cls or ''}".strip(".")
         name = f"{location}::{detail.name}" if location else detail.name
+        if not name:
+            return
         status_colors = _detail_colors()
         status_text = color(detail.status, status_colors.get(detail.status, CYAN))
         self.stream.writeln(f"  {duration:>8} {status_text:<8} {name}")
