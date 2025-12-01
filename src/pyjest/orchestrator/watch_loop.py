@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from ..watch import detect_changes, snapshot_watchable_files, targets_from_changed
+from ..watch import detect_changes, snapshot_watchable_files, targets_from_changed, has_fast_watcher, next_change
 from ..change_map import infer_targets_from_changes
 from ..coverage_support import coverage_threshold_failed
 from .runner import record_watch_outcome, run_suite
@@ -31,7 +31,8 @@ def _watch_loop(ctx: "WatchContext", args) -> int:
 
 
 def _update_outcome(ctx: "WatchContext", args) -> None:
-    ctx.last_fail, ctx.failed_targets = _run_watch_iteration(ctx, args)
+    ctx.last_fail, ctx.failed_targets, ctx.last_failure_detail = _run_watch_iteration(ctx, args)
+    _print_failure_recap(ctx)
 
 
 def _sleep_until_change(ctx: "WatchContext", args) -> None:
@@ -70,6 +71,8 @@ def _wait_for_change(
 
 
 def _wait_until_changed(snapshot: dict[Path, float], root: Path, interval: float) -> tuple[set[Path], dict[Path, float]]:
+    if has_fast_watcher():
+        return next_change(snapshot, root, interval)
     changed: set[Path] = set()
     while not changed:
         changed, snapshot = detect_changes(snapshot, root)
@@ -91,6 +94,15 @@ def _print_change_notice(changed: set[Path], root: Path) -> None:
     print(f"\nChange detected: {display}")
 
 
+def _print_failure_recap(ctx: "WatchContext") -> None:
+    if not ctx.last_fail:
+        return
+    failures = ", ".join(ctx.failed_targets) if ctx.failed_targets else "unknown modules"
+    detail = f" ({ctx.last_failure_detail})" if ctx.last_failure_detail else ""
+    print(f"Last run failed in: {failures}{detail}")
+    print("Tip: rerun failed modules first with --run-failures-first.")
+
+
 def _next_targets(args, changed: set[Path], failed_targets: Sequence[str]) -> list[str]:
     if args.onlyChanged:
         return targets_from_changed(changed, args.targets)
@@ -108,3 +120,4 @@ class WatchContext:
     failed_targets: list[str] = field(default_factory=list)
     last_fail: bool = False
     last_changed: set[Path] = field(default_factory=set)
+    last_failure_detail: str | None = None

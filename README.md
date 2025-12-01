@@ -20,6 +20,12 @@ without `cd`-ing first. Targets accept modules, packages, or files ending in
 `.py` or `.pyjest`; leave them blank to auto-discover tests in `./tests` (PyJest
 automatically picks up `.pyjest` files as part of discovery).
 
+Console output shows per-module/class breakdowns by default. Enable more sections
+as needed:
+
+- `--report-suite-table`: compact per-suite table with durations
+- `--report-outliers`: fastest/slowest tests
+
 ### CLI flags to try
 
 - `--watch [--onlyChanged] [--watch-interval 1.0]`: poll for changes and rerun, optionally narrowing to changed files.
@@ -28,9 +34,17 @@ automatically picks up `.pyjest` files as part of discovery).
 - `--maxWorkers 1`: parsed for future parallelism; currently must be 1.
 - `--updateSnapshot`: accepted for future snapshot support.
 - `--coverage [--coverage-html DIR] [--coverage-threshold PCT]`: optional coverage.py integration; write HTML to `coverage_html` by default when flag is present.
+- `--coverage-bars`: show per-file coverage bars/sparklines (optional, quiet by default).
 - `--maxWorkers N`: basic parallel run across multiple targets (experimental).
 - `--watch-debounce SECONDS`: extra debounce delay after change detection (default 0.2s).
 - `--run-failures-first`: in watch mode, rerun failing modules before falling back to other targets.
+- Progress: default inline ✓/✕/↷ glyphs now begin with a framed “Progress” banner, drop colored count panels with test #, and add mini stacked bars every few tests; add `--buffer` to switch to a live status line with spinner, elapsed time, test index, and pass/fail/skip counts.
+- `--report-format console json tap junit`: emit machine-readable reports alongside console output.
+- `--report-modules`: print per-module/class breakdowns.
+- `--report-suite-table`: print compact per-suite table.
+- `--report-outliers`: print fastest/slowest test sections.
+- `--pattern-exclude PATTERN` and `--ignore PATH`: skip noisy files during discovery.
+- `--max-diff-lines N` / `--no-color-diffs`: control assertion diff verbosity/colour.
 
 ### Expect-style assertions
 

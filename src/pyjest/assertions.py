@@ -10,6 +10,22 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from .snapshot import STORE
+from .colors import BRIGHT_CYAN, BRIGHT_GREEN, BRIGHT_RED, DIM, RESET, color
+
+
+@dataclass
+class DiffConfig:
+    max_lines: int | None = 200
+    color: bool = True
+
+
+DIFF_CONFIG = DiffConfig()
+
+
+def configure_diffs(max_lines: int | None, color: bool) -> None:
+    max_lines = None if max_lines is not None and max_lines <= 0 else max_lines
+    DIFF_CONFIG.max_lines = max_lines
+    DIFF_CONFIG.color = color
 
 
 def _pretty(value: Any) -> str:
@@ -18,14 +34,36 @@ def _pretty(value: Any) -> str:
 
 def _diff(expected: Any, actual: Any) -> str:
     left, right = _normalize_diff_inputs(expected, actual)
-    diff = difflib.ndiff(left, right)
-    return "\n".join(diff)
+    lines = list(difflib.ndiff(left, right))
+    lines = _maybe_truncate(lines)
+    if not DIFF_CONFIG.color:
+        return "\n".join(lines)
+    return "\n".join(_colorize_diff_line(line) for line in lines)
 
 
 def _normalize_diff_inputs(expected: Any, actual: Any) -> tuple[list[str], list[str]]:
     if isinstance(expected, str) and isinstance(actual, str):
         return expected.splitlines(), actual.splitlines()
     return _pretty(expected).splitlines(), _pretty(actual).splitlines()
+
+
+def _maybe_truncate(lines: list[str]) -> list[str]:
+    max_lines = DIFF_CONFIG.max_lines
+    if max_lines is None or len(lines) <= max_lines:
+        return lines
+    head = lines[: max_lines - 1]
+    head.append(f"... ({len(lines) - len(head)} more lines truncated)")
+    return head
+
+
+def _colorize_diff_line(line: str) -> str:
+    if line.startswith("+"):
+        return color(line, BRIGHT_GREEN)
+    if line.startswith("-"):
+        return color(line, BRIGHT_RED)
+    if line.startswith("?"):
+        return color(line, BRIGHT_CYAN)
+    return color(line, DIM)
 
 
 def expect(value: Any) -> "Expectation":

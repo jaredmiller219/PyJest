@@ -15,6 +15,8 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     _add_target_args(parser)
     _add_execution_args(parser)
     _add_coverage_args(parser)
+    _add_reporting_args(parser)
+    _add_diff_args(parser)
     parser.add_argument("--buffer", action="store_true", help="Buffer stdout/stderr during tests")
     return parser.parse_args(argv)
 
@@ -47,6 +49,12 @@ def _add_watch_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="In watch mode, re-run only tests affected by changed files",
     )
+    parser.add_argument(
+        "--maxTargetsPerWorker",
+        type=int,
+        default=0,
+        help="Maximum targets to assign to a single worker when running in parallel (0 = unlimited)",
+    )
 
 
 def _add_target_args(parser: argparse.ArgumentParser) -> None:
@@ -66,6 +74,20 @@ def _add_target_args(parser: argparse.ArgumentParser) -> None:
         "--pattern",
         default="test*.py",
         help="Filename pattern when discovering directories (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--pattern-exclude",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Glob pattern(s) to exclude from discovery",
+    )
+    parser.add_argument(
+        "--ignore",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Directory or file paths to ignore during discovery",
     )
 
 
@@ -87,6 +109,16 @@ def _add_execution_args(parser: argparse.ArgumentParser) -> None:
         "--updateSnapshot",
         action="store_true",
         help="Parse snapshot update flag (reserved for future snapshot support)",
+    )
+    parser.add_argument(
+        "--snapshot-summary",
+        action="store_true",
+        help="Show a snapshot create/update summary after a run",
+    )
+    parser.add_argument(
+        "--coverage-bars",
+        action="store_true",
+        help="Show per-file coverage bars/sparklines when reporting coverage",
     )
 
 
@@ -119,3 +151,51 @@ def _add_coverage_args(parser: argparse.ArgumentParser) -> None:
         help="Fail if total coverage percentage is below this value",
     )
     parser.set_defaults(coverage=False)
+
+
+def _add_reporting_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--report-format",
+        nargs="+",
+        choices=["console", "json", "tap", "junit"],
+        default=["console"],
+        help="Additional report formats to write (console always shown)",
+    )
+    parser.add_argument(
+        "--report-modules",
+        action="store_true",
+        help="Show per-module/class test breakdowns above the summary (default on)",
+    )
+    parser.add_argument(
+        "--no-report-modules",
+        action="store_false",
+        dest="report_modules",
+        help="Hide per-module/class test breakdowns",
+    )
+    parser.add_argument(
+        "--report-suite-table",
+        action="store_true",
+        help="Show compact per-suite table in the console output",
+    )
+    parser.add_argument(
+        "--report-outliers",
+        action="store_true",
+        help="Show fastest/slowest test sections in the console output",
+    )
+    parser.set_defaults(report_modules=True)
+
+
+def _add_diff_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--max-diff-lines",
+        type=int,
+        default=200,
+        help="Maximum diff lines to display in assertion failures (0 = unlimited)",
+    )
+    parser.add_argument(
+        "--no-color-diffs",
+        action="store_false",
+        dest="color_diffs",
+        help="Disable colorized inline diffs",
+    )
+    parser.set_defaults(color_diffs=True)

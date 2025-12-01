@@ -10,7 +10,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Sequence
 
 
 PROJECT_ROOT = Path.cwd()
@@ -96,6 +96,25 @@ def _pyjest_matches_pattern(path: Path, pattern: str) -> bool:
     return fnmatch.fnmatch(pretend_py, pattern)
 
 
+def _auto_patterns(pattern: str, root: Path) -> list[str]:
+    """Expand default pattern to include pytest/Django variants if present."""
+    patterns = [pattern]
+    if pattern == "test*.py":
+        if any(root.rglob("*_test.py")):
+            patterns.append("*_test.py")
+        if (root / "manage.py").exists() or any(root.rglob("tests.py")):
+            patterns.append("tests.py")
+    # Deduplicate while preserving order
+    seen = set()
+    unique: list[str] = []
+    for pat in patterns:
+        if pat in seen:
+            continue
+        seen.add(pat)
+        unique.append(pat)
+    return unique
+
+
 def _load_tests_from_pyjest_file(loader: unittest.TestLoader, path: Path) -> unittest.TestSuite:
     module_name = _module_name_from_path(path)
     loader_obj = SourceFileLoader(module_name, str(path))
@@ -157,11 +176,22 @@ def _module_name_from_path(path: Path) -> str:
     return module
 
 
-def _load_targets(loader: unittest.TestLoader, targets: Sequence[str], pattern: str) -> unittest.TestSuite:
+def _load_targets(
+    loader: unittest.TestLoader,
+    targets: Sequence[str],
+    pattern: str,
+    pattern_exclude: Sequence[str] | None = None,
+    ignores: Sequence[str] | None = None,
+) -> unittest.TestSuite:
     targets = _default_targets_if_empty(targets)
+    patterns = _auto_patterns(pattern, PROJECT_ROOT)
+    exclude_patterns = tuple(pattern_exclude or ())
+    ignore_paths = tuple((PROJECT_ROOT / Path(p)).resolve() for p in (ignores or ()))
     suites: list[unittest.TestSuite] = []
     for target in targets:
-        suites.append(_load_single_target(loader, target, pattern))
+        suite = _load_single_target(loader, target, patterns)
+        suite = _filter_suite(suite, exclude_patterns, ignore_paths)
+        suites.append(suite)
     return unittest.TestSuite(suites)
 
 
@@ -182,19 +212,20 @@ def _default_targets_if_empty(targets: Sequence[str]) -> Sequence[str]:
     raise SystemExit("no pyjest file(s) exists")
 
 
-def _load_single_target(loader: unittest.TestLoader, target: str, pattern: str) -> unittest.TestSuite:
+def _load_single_target(loader: unittest.TestLoader, target: str, patterns: Sequence[str]) -> unittest.TestSuite:
     path = Path(target)
     if path.is_dir():
-        return _load_directory_target(loader, path, pattern)
+        return _load_directory_target(loader, path, patterns)
     if path.is_file():
         return _load_file_target(loader, path)
     return loader.loadTestsFromName(target)
 
 
-def _load_directory_target(loader: unittest.TestLoader, path: Path, pattern: str) -> unittest.TestSuite:
+def _load_directory_target(loader: unittest.TestLoader, path: Path, patterns: Sequence[str]) -> unittest.TestSuite:
     if not _has_test_files(path):
         raise SystemExit(f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files.")
-    return _load_directory_suite(loader, path, pattern)
+    suites = [_load_directory_suite(loader, path, pattern) for pattern in patterns]
+    return _merge_suites(suites)
 
 
 def _load_file_target(loader: unittest.TestLoader, path: Path) -> unittest.TestSuite:
@@ -205,3 +236,69 @@ def _load_file_target(loader: unittest.TestLoader, path: Path) -> unittest.TestS
     raise SystemExit(
         f"'{path}' is not a .pyjest file. Rename it to end with .pyjest or pass an importable module path."
     )
+
+
+def _merge_suites(suites: Sequence[unittest.TestSuite]) -> unittest.TestSuite:
+    tests: list[unittest.case.TestCase] = []
+    seen_ids: set[str] = set()
+    for suite in suites:
+        for test in _iter_tests(suite):
+            tid = test.id()
+            if tid in seen_ids:
+                continue
+            seen_ids.add(tid)
+            tests.append(test)
+    return unittest.TestSuite(tests)
+
+
+def _iter_tests(suite: unittest.TestSuite) -> Iterable[unittest.case.TestCase]:
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from _iter_tests(test)
+        else:
+            yield test
+
+
+def _filter_suite(
+    suite: unittest.TestSuite, excludes: Sequence[str], ignores: Sequence[Path]
+) -> unittest.TestSuite:
+    if not excludes and not ignores:
+        return suite
+    filtered: list[unittest.case.TestCase] = []
+    for test in _iter_tests(suite):
+        path = _test_file(test)
+        if path is None:
+            filtered.append(test)
+            continue
+        if _should_exclude(path, excludes, ignores):
+            continue
+        filtered.append(test)
+    return unittest.TestSuite(filtered)
+
+
+def _test_file(test: unittest.case.TestCase) -> Path | None:
+    module = sys.modules.get(test.__class__.__module__)
+    if module and getattr(module, "__file__", None):
+        return Path(module.__file__).resolve()
+    return None
+
+
+def _should_exclude(path: Path, excludes: Sequence[str], ignores: Sequence[Path]) -> bool:
+    rel = None
+    try:
+        rel = path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        rel = path
+    rel_str = str(rel)
+    if any(rel_str.endswith(pattern) or fnmatch.fnmatch(rel_str, pattern) for pattern in excludes):
+        return True
+    for ignore in ignores:
+        try:
+            rel_ignore = rel if rel else path
+            if rel_ignore.is_relative_to(ignore):
+                return True
+        except AttributeError:
+            # Python < 3.9 compatibility fallback
+            if str(rel_ignore).startswith(str(ignore)):
+                return True
+    return False

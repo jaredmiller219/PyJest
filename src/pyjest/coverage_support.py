@@ -6,14 +6,18 @@ import io
 from pathlib import Path
 from typing import Any
 
+from .colors import BRIGHT_GREEN, BRIGHT_RED, BRIGHT_YELLOW, color
+
 
 def make_coverage(root: Path):
     coverage_module = _import_coverage()
     return coverage_module.Coverage(branch=True, source=[str(root)])
 
 
-def report_coverage(cov: Any, html_dir: str | None) -> float:
+def report_coverage(cov: Any, html_dir: str | None, show_bars: bool = False) -> float:
     percent = _write_text_report(cov)
+    if show_bars:
+        _print_file_highlights(cov)
     _maybe_write_html(cov, html_dir)
     return float(percent)
 
@@ -23,7 +27,8 @@ def coverage_threshold_failed(percent: float | None, threshold: float | None) ->
         return False
     if percent >= threshold:
         return False
-    print(f"Coverage threshold not met: {percent:.2f}% < {threshold:.2f}%")
+    message = f"Coverage threshold not met: {percent:.2f}% < {threshold:.2f}%"
+    print(color(message, BRIGHT_RED))
     return True
 
 
@@ -52,3 +57,50 @@ def _maybe_write_html(cov: Any, html_dir: str | None) -> None:
     output_dir = Path(html_dir).resolve()
     cov.html_report(directory=str(output_dir))
     print(f"HTML coverage report written to {output_dir}")
+
+
+def _print_file_highlights(cov: Any, width: int = 20) -> None:
+    stats = _collect_file_stats(cov)
+    if not stats:
+        return
+    stats_sorted = sorted(stats, key=lambda item: item["percent"], reverse=True)
+    top = stats_sorted[:3]
+    bottom = stats_sorted[-3:]
+    print("Coverage file highlights:")
+    seen: set[str] = set()
+    for entry in top + bottom:
+        key = entry["filename"]
+        if key in seen:
+            continue
+        seen.add(key)
+        bar = _render_bar(entry["percent"], width)
+        print(f"  {bar} {entry['percent']:6.2f}% {entry['filename']}")
+
+
+def _collect_file_stats(cov: Any) -> list[dict[str, Any]]:
+    data = cov.get_data()
+    stats: list[dict[str, Any]] = []
+    for filename in sorted(data.measured_files()):
+        try:
+            _, statements, missing, _, _ = cov.analysis2(filename)
+        except Exception:
+            continue
+        if not statements:
+            continue
+        covered = len(statements) - len(missing)
+        percent = (covered / len(statements)) * 100 if statements else 0.0
+        stats.append({"filename": filename, "percent": percent})
+    return stats
+
+
+def _render_bar(percent: float, width: int) -> str:
+    filled = max(0, min(width, int((percent / 100.0) * width)))
+    empty = width - filled
+    bar = "█" * filled + "░" * empty
+    if percent >= 90:
+        clr = BRIGHT_GREEN
+    elif percent >= 70:
+        clr = BRIGHT_YELLOW
+    else:
+        clr = BRIGHT_RED
+    return color(bar, clr)

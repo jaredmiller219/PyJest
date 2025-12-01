@@ -26,6 +26,7 @@ from .colors import (
     color,
 )
 from .discovery import _doc_summary, _format_test_name, _format_test_title, _module_display
+from .snapshot import print_snapshot_summary
 
 
 @dataclass
@@ -36,6 +37,8 @@ class TestDetail:
     summary: str | None = None
     note: str | None = None
     detail: str | None = None
+    module: str | None = None
+    cls: str | None = None
 
 
 @dataclass
@@ -53,6 +56,7 @@ class ModuleReport:
     counts: Counter = field(default_factory=Counter)
     groups: dict[str, ClassGroup] = field(default_factory=dict)
     group_order: list[str] = field(default_factory=list)
+    total_duration: float = 0.0
 
     def register(self, class_name: str, class_doc_title: str | None, detail: TestDetail) -> None:
         if class_name not in self.groups:
@@ -60,6 +64,7 @@ class ModuleReport:
             self.group_order.append(class_name)
         self.groups[class_name].tests.append(detail)
         self.counts[detail.status] += 1
+        self.total_duration += detail.duration
 
     @property
     def headline_status(self) -> str:
@@ -88,6 +93,20 @@ class JestStyleResult(unittest.TestResult):
         self._module_reports: dict[str, ModuleReport] = {}
         self._module_order: list[str] = []
         self._progress_started = False
+        self._progress_start = 0.0
+        self._progress_last = 0.0
+        self._spinner_state = 0
+        self._current_test: unittest.case.TestCase | None = None
+        self._all_details: list[TestDetail] = []
+        self.report_modules: bool = False
+        self.report_suite_table: bool = False
+        self.report_outliers: bool = False
+        self.spinner_enabled: bool = True
+        self._progress_counts: Counter[str] = Counter()
+        self._status_line_len = 0
+        self._inline_progress_total = 0
+        self._tests_seen = 0
+        self.spinner_enabled: bool = True
 
     @property
     def successes(self) -> Sequence[unittest.case.TestCase]:
@@ -97,15 +116,93 @@ class JestStyleResult(unittest.TestResult):
         super().startTestRun()
         self.stream.writeln("Running tests...")
         self._progress_started = True
+        self._progress_start = time.perf_counter()
 
-    def _write_progress(self, icon: str) -> None:
+    def _record_progress(self, status: str) -> None:
         if not self._progress_started:
             return
-        self.stream.write(icon)
+        self._progress_counts[status] += 1
+        if self.spinner_enabled:
+            self._write_status_line()
+        else:
+            self._write_progress_icon(status)
+
+    def _write_status_line(self) -> None:
+        if not self.spinner_enabled or not self._progress_started or not self._current_test:
+            return
+        now = time.perf_counter()
+        if now - self._progress_last < 0.05:
+            return
+        self._progress_last = now
+        elapsed = now - self._progress_start
+        spinner = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"][self._spinner_state % 8]
+        self._spinner_state += 1
+        module_name = self._current_test.__class__.__module__
+        test_title = _format_test_title(self._current_test)
+        pass_count = self._progress_counts.get("PASS", 0) + self._progress_counts.get("XPASS", 0)
+        fail_count = self._progress_counts.get("FAIL", 0) + self._progress_counts.get("ERROR", 0)
+        skip_count = self._progress_counts.get("SKIP", 0) + self._progress_counts.get("XF", 0)
+        line = (
+            f"\r{color(spinner, BRIGHT_CYAN)} {elapsed:5.1f}s "
+            f"#{self._tests_seen:<3d} "
+            f"{color('✓', BRIGHT_GREEN)} {pass_count} "
+            f"{color('✕', BRIGHT_RED)} {fail_count} "
+            f"{color('↷', BRIGHT_YELLOW)} {skip_count} "
+            f"{color(module_name, DIM)} {test_title}"
+        )
+        padded = line.ljust(self._status_line_len or len(line))
+        self._status_line_len = max(self._status_line_len, len(line))
+        self.stream.write(padded)
         self.stream.flush()
+
+    def _write_progress_icon(self, status: str) -> None:
+        icon = _icon_map().get(status, color("•", CYAN))
+        self._inline_progress_total += 1
+        if self._inline_progress_total == 1:
+            banner = (
+                color("╭──────────────────────────╮", BRIGHT_CYAN)
+                + "\n"
+                + color("│        Progress          │", BRIGHT_CYAN)
+                + "\n"
+                + color("╰──────────────────────────╯", BRIGHT_CYAN)
+            )
+            self.stream.write(f"\n{banner}\n ")
+        self.stream.write(icon)
+        if self._inline_progress_total % 8 == 0:
+            self.stream.write(" ")
+        if self._inline_progress_total % 32 == 0:
+            summary = (
+                f"[{color('✓', BRIGHT_GREEN)} {self._progress_counts.get('PASS', 0) + self._progress_counts.get('XPASS', 0)} "
+                f"{color('✕', BRIGHT_RED)} {self._progress_counts.get('FAIL', 0) + self._progress_counts.get('ERROR', 0)} "
+                f"{color('↷', BRIGHT_YELLOW)} {self._progress_counts.get('SKIP', 0) + self._progress_counts.get('XF', 0)} "
+                f"{color('#', CYAN)} {self._tests_seen}]"
+            )
+            border = "─" * max(len(summary) - 2, 6)
+            self.stream.write(f"\n┌{border}┐\n {summary}\n└{border}┘\n ")
+        if self._inline_progress_total % 16 == 0:
+            bar = self._progress_bar()
+            self.stream.write(f"\n {bar}\n ")
+        self.stream.flush()
+
+    def _progress_bar(self, width: int = 20) -> str:
+        total = sum(self._progress_counts.values()) or 1
+        passes = self._progress_counts.get("PASS", 0) + self._progress_counts.get("XPASS", 0)
+        fails = self._progress_counts.get("FAIL", 0) + self._progress_counts.get("ERROR", 0)
+        skips = self._progress_counts.get("SKIP", 0) + self._progress_counts.get("XF", 0)
+        passed_width = int((passes / total) * width)
+        failed_width = int((fails / total) * width)
+        skipped_width = width - passed_width - failed_width
+        bar = (
+            color("█" * passed_width, BRIGHT_GREEN)
+            + color("█" * failed_width, BRIGHT_RED)
+            + color("█" * max(skipped_width, 0), BRIGHT_YELLOW)
+        )
+        return f"[{bar}]"
 
     def startTest(self, test):  # type: ignore[override]
         self._start_times[test] = time.perf_counter()
+        self._current_test = test
+        self._tests_seen += 1
         super().startTest(test)
 
     def _elapsed(self, test: unittest.case.TestCase) -> float:
@@ -141,33 +238,55 @@ class JestStyleResult(unittest.TestResult):
         cls = test.__class__
         class_name = cls.__name__
         class_doc_title = _doc_summary(getattr(cls, "__doc__", None))
-        report.register(
-            class_name,
-            class_doc_title,
-            TestDetail(name=title, status=status, duration=duration, summary=summary, note=note, detail=detail),
+        module_name = cls.__module__
+        detail_obj = TestDetail(
+            name=title,
+            status=status,
+            duration=duration,
+            summary=summary,
+            note=note,
+            detail=detail,
+            module=module_name,
+            cls=class_name,
         )
+        report.register(class_name, class_doc_title, detail_obj)
+        self._all_details.append(detail_obj)
 
     def print_module_reports(self) -> None:
+        if not (self.report_modules or self.report_suite_table or self.report_outliers):
+            return
         status_colors = _status_colors()
         detail_colors = _detail_colors()
         icon_map = _icon_map()
-        self.stream.writeln("")
-        for module_name in self._module_order:
-            report = self._module_reports[module_name]
-            badge = _format_badge(report.headline_status, status_colors)
-            display = _format_module_display(report.display)
-            self.stream.writeln(f"{badge} {display}")
-            for class_name in report.group_order:
-                group = report.groups[class_name]
-                self._print_group(group, detail_colors, icon_map)
+        printed_any = False
+        if self.report_modules:
+            self.stream.writeln("")
+            for module_name in self._module_order:
+                report = self._module_reports[module_name]
+                badge = _format_badge(report.headline_status, status_colors)
+                display = _format_module_display(report.display)
+                self.stream.writeln(f"{badge} {display}")
+                for class_name in report.group_order:
+                    group = report.groups[class_name]
+                    self._print_group(group, detail_colors, icon_map)
+                    self.stream.writeln("")
+            printed_any = True
+        if self.report_suite_table and self._module_order:
+            if not printed_any:
                 self.stream.writeln("")
+            self._print_suite_table()
+            printed_any = True
+        if self.report_outliers and self._module_order:
+            if not printed_any:
+                self.stream.writeln("")
+            self._print_outliers()
 
     def addSuccess(self, test):  # type: ignore[override]
         super().addSuccess(test)
         duration = self._elapsed(test)
         self._successes.append(test)
         self._add_detail(test, "PASS", duration)
-        self._write_progress(color("✓", BRIGHT_GREEN))
+        self._record_progress("PASS")
 
     def addFailure(self, test, err):  # type: ignore[override]
         super().addFailure(test, err)
@@ -175,7 +294,7 @@ class JestStyleResult(unittest.TestResult):
         formatted = self._exc_info_to_string(err, test)
         self._failures_detail.append((test, formatted))
         self._add_detail(test, "FAIL", duration, detail=formatted)
-        self._write_progress(color("✕", BRIGHT_RED))
+        self._record_progress("FAIL")
 
     def addError(self, test, err):  # type: ignore[override]
         super().addError(test, err)
@@ -183,30 +302,34 @@ class JestStyleResult(unittest.TestResult):
         formatted = self._exc_info_to_string(err, test)
         self._errors_detail.append((test, formatted))
         self._add_detail(test, "ERROR", duration, detail=formatted)
-        self._write_progress(color("✕", BRIGHT_RED))
+        self._record_progress("ERROR")
 
     def addSkip(self, test, reason):  # type: ignore[override]
         super().addSkip(test, reason)
         duration = self._elapsed(test)
         self._skips_detail.append((test, reason))
         self._add_detail(test, "SKIP", duration, note=reason)
-        self._write_progress(color("↷", BRIGHT_YELLOW))
+        self._record_progress("SKIP")
 
     def addExpectedFailure(self, test, err):  # type: ignore[override]
         super().addExpectedFailure(test, err)
         self._expected_failures.append((test, self._exc_info_to_string(err, test)))
         duration = self._elapsed(test)
         self._add_detail(test, "XF", duration)
-        self._write_progress(color("≒", BRIGHT_YELLOW))
+        self._record_progress("XF")
 
     def addUnexpectedSuccess(self, test):  # type: ignore[override]
         super().addUnexpectedSuccess(test)
         duration = self._elapsed(test)
         self._unexpected_successes.append(test)
         self._add_detail(test, "XPASS", duration)
-        self._write_progress(color("★", BRIGHT_CYAN))
+        self._record_progress("XPASS")
 
     def printErrors(self):  # type: ignore[override]
+        # Clear any lingering status line before printing details.
+        if self._status_line_len:
+            self.stream.write("\n")
+            self._status_line_len = 0
         sections = [
             ("Failures", self._failures_detail),
             ("Errors", self._errors_detail),
@@ -257,6 +380,45 @@ class JestStyleResult(unittest.TestResult):
             for extra_line in detail.detail.splitlines():
                 self.stream.writeln(f"      {extra_line}")
 
+    def _print_suite_table(self) -> None:
+        status_colors = _status_colors()
+        header = f"{'Status':<8}{'Pass':>6}{'Fail':>6}{'Skip':>6}{'Time':>10}  Module"
+        self.stream.writeln(header)
+        self.stream.writeln("-" * len(header))
+        for module_name in self._module_order:
+            report = self._module_reports[module_name]
+            status = report.headline_status
+            clr = status_colors.get(status, CYAN)
+            status_text = color(status, clr)
+            passed = report.counts.get("PASS", 0)
+            failed = report.counts.get("FAIL", 0) + report.counts.get("ERROR", 0)
+            skipped = report.counts.get("SKIP", 0)
+            duration = _format_duration(report.total_duration)
+            module_display = _format_module_display(report.display)
+            self.stream.writeln(f"{status_text:<8}{passed:>6}{failed:>6}{skipped:>6}{duration:>10}  {module_display}")
+
+    def _print_outliers(self, limit: int = 3) -> None:
+        if not self._all_details:
+            return
+        sorted_details = sorted(self._all_details, key=lambda d: d.duration)
+        fastest = sorted_details[:limit]
+        slowest = sorted_details[-limit:][::-1]
+        self.stream.writeln("")
+        self.stream.writeln(color("Fastest tests:", BRIGHT_GREEN))
+        for detail in fastest:
+            self._print_outlier_line(detail)
+        self.stream.writeln(color("Slowest tests:", BRIGHT_RED))
+        for detail in slowest:
+            self._print_outlier_line(detail)
+
+    def _print_outlier_line(self, detail: TestDetail) -> None:
+        duration = _format_duration(detail.duration)
+        location = f"{detail.module or ''}.{detail.cls or ''}".strip(".")
+        name = f"{location}::{detail.name}" if location else detail.name
+        status_colors = _detail_colors()
+        status_text = color(detail.status, status_colors.get(detail.status, CYAN))
+        self.stream.writeln(f"  {duration:>8} {status_text:<8} {name}")
+
 
 def _status_colors() -> dict[str, str]:
     return {"PASS": BRIGHT_GREEN, "FAIL": BRIGHT_RED, "SKIP": BRIGHT_YELLOW}
@@ -302,16 +464,37 @@ def _format_module_display(display: str) -> str:
     return color(filename, BOLD)
 
 
+def _format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    return f"{seconds:.2f} s"
+
+
 class JestStyleTestRunner(unittest.TextTestRunner):
     resultclass = JestStyleResult
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        spinner: bool = True,
+        report_modules: bool = False,
+        report_suite_table: bool = False,
+        report_outliers: bool = False,
+        **kwargs,
+    ):
+        self.spinner = spinner
+        self._report_modules = report_modules
+        self._report_suite_table = report_suite_table
+        self._report_outliers = report_outliers
         super().__init__(verbosity=2, **kwargs)
 
     def run(self, test):  # type: ignore[override]
         result = self._makeResult()
         result.failfast = self.failfast
         result.buffer = self.buffer
+        result.spinner_enabled = self.spinner
+        result.report_modules = self._report_modules
+        result.report_suite_table = self._report_suite_table
+        result.report_outliers = self._report_outliers
         start_time = time.perf_counter()
 
         result.startTestRun()
@@ -321,11 +504,14 @@ class JestStyleTestRunner(unittest.TextTestRunner):
             result.stopTestRun()
 
         # Drop a newline after the inline progress symbols.
-        self.stream.writeln("")
+        if self.stream is not None:
+            self.stream.writeln("")
         duration = time.perf_counter() - start_time
         result.print_module_reports()
         result.printErrors()
         self._print_summary(result, duration)
+        # Drop a blank line after summary to separate from any prior status line.
+        self.stream.writeln("")
         return result
 
     def _print_summary(self, result: JestStyleResult, duration: float) -> None:
@@ -379,6 +565,7 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         self.stream.writeln(f"  Test Suites: {suite_summary}")
         self.stream.writeln(f"  Tests:       {test_summary}")
         self.stream.writeln(f"  Time:        {duration:.2f}s")
+        print_snapshot_summary()
 
     def _print_group(self, group: ClassGroup, detail_colors: dict[str, str], icon_map: dict[str, str]) -> None:
         description = group.doc_title or group.name

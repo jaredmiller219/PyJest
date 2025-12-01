@@ -26,8 +26,12 @@ def _prepare_args(argv: Sequence[str] | None) -> object:
     args.failfast = args.failfast or args.bail
     if args.maxWorkers < 1:
         raise SystemExit("--maxWorkers must be >= 1")
+    if args.maxTargetsPerWorker < 0:
+        raise SystemExit("--maxTargetsPerWorker must be >= 0")
     if args.coverage_html is not None or args.coverage_threshold is not None:
         args.coverage = True
+    if "console" not in args.report_format:
+        args.report_format.append("console")
     return args
 
 

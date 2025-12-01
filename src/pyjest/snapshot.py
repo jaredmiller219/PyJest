@@ -37,12 +37,16 @@ def _snapshot_file_for_module(root: Path, module_name: str) -> Path:
 class SnapshotStore:
     root: Path = field(default_factory=lambda: PROJECT_ROOT)
     update: bool = False
+    show_summary: bool = False
     _cache: Dict[Path, Dict[str, Any]] = field(default_factory=dict)
+    _touched: list[tuple[Path, str, str]] = field(default_factory=list)
 
-    def configure(self, root: Path, update: bool) -> None:
+    def configure(self, root: Path, update: bool, show_summary: bool = False) -> None:
         self.root = root
         self.update = update
+        self.show_summary = show_summary
         self._cache.clear()
+        self._touched.clear()
 
     def _load_file(self, path: Path) -> Dict[str, Any]:
         if path in self._cache:
@@ -73,6 +77,9 @@ class SnapshotStore:
             )
         snapshots[snap_name] = value
         self._save_file(file_path, snapshots)
+        self._note_touched(file_path, snap_name, "created")
+        if self.show_summary:
+            print(f"[snapshot] created {file_path}:{snap_name}")
 
     def _compare_or_update_snapshot(
         self, snap_name: str, snapshots: Dict[str, Any], file_path: Path, value: Any
@@ -83,6 +90,9 @@ class SnapshotStore:
         if self.update:
             snapshots[snap_name] = value
             self._save_file(file_path, snapshots)
+            self._note_touched(file_path, snap_name, "updated")
+            if self.show_summary:
+                print(f"[snapshot] updated {file_path}:{snap_name}")
             return
         raise AssertionError(
             f"Snapshot mismatch for '{snap_name}'. "
@@ -101,5 +111,27 @@ class SnapshotStore:
             return {}
         return content
 
+    def _note_touched(self, file_path: Path, snap_name: str, action: str) -> None:
+        self._touched.append((file_path, snap_name, action))
+
+    def summary_lines(self) -> list[str]:
+        if not self._touched:
+            return []
+        lines = ["Snapshots touched:"]
+        for file_path, snap_name, action in self._touched:
+            lines.append(f"  - {action}: {file_path}:{snap_name}")
+        return lines
+
 
 STORE = SnapshotStore()
+
+
+def print_snapshot_summary() -> None:
+    if not STORE.show_summary:
+        return
+    lines = STORE.summary_lines()
+    if not lines:
+        print("Snapshots touched: none")
+        return
+    for line in lines:
+        print(line)
