@@ -34,6 +34,14 @@ class PyjestCliTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, msg=result.stdout)
         self.assertIn("FAIL", result.stdout)
 
+    def test_cli_rejects_missing_root(self) -> None:
+        missing_root = PROJECT_ROOT / "missing_pyjest_root_dir"
+        self.assertFalse(missing_root.exists(), "Test assumes the missing root does not exist")
+
+        result = _run_pyjest(["--root", str(missing_root)])
+        self.assertNotEqual(result.returncode, 0, msg=result.stdout)
+        self.assertIn("--root path not found", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,8 +11,13 @@ from ..snapshot import STORE as SNAPSHOTS
 
 
 def prepare_environment(args) -> None:
-    root = (args.root or Path.cwd()).expanduser().resolve()
-    if args.root:
+    requested_root = args.root
+    root = (requested_root or Path.cwd()).expanduser().resolve()
+    if requested_root:
+        if not root.exists():
+            raise SystemExit(f"--root path not found: {root}")
+        if not root.is_dir():
+            raise SystemExit(f"--root must be a directory: {root}")
         os.chdir(root)
     args.root = root
     _set_project_root(root)
