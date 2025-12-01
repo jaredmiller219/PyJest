@@ -11,7 +11,7 @@ from copy import copy
 from typing import Sequence
 
 from ..coverage_support import coverage_threshold_failed, make_coverage, report_coverage
-from ..discovery import _load_targets, _format_test_title
+from ..discovery import _load_targets
 from ..reporter import JestStyleTestRunner
 from ..reporting import emit_reports
 
@@ -21,7 +21,15 @@ def run_suite(
 ) -> tuple[unittest.result.TestResult, float | None, str]:
     cov = _start_coverage_if_needed(args)
     stream = stream or sys.stdout
-    suite = _load_targets(loader, targets, args.pattern, args.pattern_exclude, args.ignore)
+    suite = _load_targets(
+        loader,
+        targets,
+        args.pattern,
+        args.pattern_exclude,
+        args.ignore,
+        include_standard=not getattr(args, "pyjest_only", False),
+        include_pyjest=True,
+    )
     start = time.perf_counter()
     result = _run_suite_with_runner(suite, stream, args)
     duration = time.perf_counter() - start
@@ -68,7 +76,12 @@ def record_watch_outcome(
     detail = None
     if result.failures or result.errors:
         test, err = (result.failures + result.errors)[0]  # type: ignore[operator]
-        detail = f"{_format_test_title(test)}: {err.splitlines()[0] if err else ''}"
+        method_name = getattr(test, "_testMethodName", "")
+        fn = getattr(test, method_name, None)
+        label = getattr(fn, "__pyjest_test__", None) if fn else None
+        if not label:
+            label = getattr(test, "__pyjest_test__", None) or ""
+        detail = f"{label}: {err.splitlines()[0] if err else ''}"
     return last_fail, failed_modules(result), detail
 
 

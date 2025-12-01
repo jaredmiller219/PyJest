@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from pyjest import coverage_support
+from pyjest import coverage_support, describe, test
 from test_pyjest_cli import _run_pyjest
 
 
@@ -21,6 +21,7 @@ HAS_COVERAGE = _coverage_available()
 
 
 @unittest.skipUnless(HAS_COVERAGE, "coverage.py not installed")
+@describe("Coverage CLI integration")
 class CoverageCLITests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
@@ -30,6 +31,7 @@ class CoverageCLITests(unittest.TestCase):
         self._env_patcher.start()
         self.addCleanup(self._env_patcher.stop)
 
+    @test("coverage threshold passes when target is easily met")
     def test_coverage_threshold_passes(self) -> None:
         result = _run_pyjest(
             ["--pattern", "fixture_*.py", "tests/fixtures/basic", "--coverage", "--coverage-threshold", "0"]
@@ -37,6 +39,7 @@ class CoverageCLITests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stdout)
         self.assertIn("TOTAL", result.stdout)
 
+    @test("coverage threshold fails when target is impossible")
     def test_coverage_threshold_fails(self) -> None:
         result = _run_pyjest(
             [
@@ -51,6 +54,7 @@ class CoverageCLITests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Coverage threshold not met", result.stdout)
 
+    @test("coverage html report writes and stays in a temp directory")
     def test_coverage_html_report_writes_to_temp_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir, mock.patch.dict(
             os.environ,

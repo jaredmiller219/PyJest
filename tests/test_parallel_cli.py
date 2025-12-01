@@ -1,9 +1,13 @@
 import unittest
 
+from pyjest import describe, test
+
 from test_pyjest_cli import _run_pyjest
 
 
+@describe("Parallel CLI")
 class ParallelCLITests(unittest.TestCase):
+    @test("parallel targets run")
     def test_parallel_targets(self) -> None:
         result = _run_pyjest(
             [

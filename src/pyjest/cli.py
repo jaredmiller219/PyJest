@@ -99,6 +99,11 @@ def _add_target_args(parser: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="Directory or file paths to ignore during discovery",
     )
+    parser.add_argument(
+        "--pyjest-only",
+        action="store_true",
+        help="Run only .pyjest test files (ignore regular .py tests)",
+    )
 
 
 def _add_execution_args(parser: argparse.ArgumentParser) -> None:

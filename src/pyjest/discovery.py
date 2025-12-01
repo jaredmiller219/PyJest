@@ -83,11 +83,20 @@ def _format_test_name(test: unittest.case.TestCase) -> str:
 
 
 def _format_test_title(test: unittest.case.TestCase) -> str:
-    description = test.shortDescription()
-    if description:
-        return description.strip()
+    method_tag = getattr(test, "__pyjest_test__", None)
+    if not method_tag:
+        fn = getattr(test, getattr(test, "_testMethodName", ""), None)
+        method_tag = getattr(fn, "__pyjest_test__", None) if fn else None
+
+    if method_tag:
+        return method_tag
+
+    method_desc = test.shortDescription()
+    if method_desc:
+        return method_desc.strip()
+
     raw = getattr(test, "_testMethodName", test.id())
-    return raw.replace("_", " ").strip()
+    return raw.strip()
 
 
 def _pyjest_matches_pattern(path: Path, pattern: str) -> bool:
@@ -140,13 +149,19 @@ def _discover_pyjest_files(loader: unittest.TestLoader, directory: Path, pattern
     return suites
 
 
-def _load_directory_suite(loader: unittest.TestLoader, directory: Path, pattern: str) -> unittest.TestSuite:
-    base_suite = loader.discover(str(directory), pattern=pattern)
-    extra = _discover_pyjest_files(loader, directory, pattern)
-    if not extra:
-        return base_suite
-    suites: list[unittest.TestSuite] = [base_suite]
-    suites.extend(extra)
+def _load_directory_suite(
+    loader: unittest.TestLoader,
+    directory: Path,
+    pattern: str,
+    *,
+    include_standard: bool = True,
+    include_pyjest: bool = True,
+) -> unittest.TestSuite:
+    suites: list[unittest.TestSuite] = []
+    if include_standard:
+        suites.append(loader.discover(str(directory), pattern=pattern))
+    if include_pyjest:
+        suites.extend(_discover_pyjest_files(loader, directory, pattern))
     return unittest.TestSuite(suites)
 
 
@@ -182,6 +197,9 @@ def _load_targets(
     pattern: str,
     pattern_exclude: Sequence[str] | None = None,
     ignores: Sequence[str] | None = None,
+    *,
+    include_standard: bool = True,
+    include_pyjest: bool = True,
 ) -> unittest.TestSuite:
     targets = _default_targets_if_empty(targets)
     patterns = _auto_patterns(pattern, PROJECT_ROOT)
@@ -189,7 +207,9 @@ def _load_targets(
     ignore_paths = tuple((PROJECT_ROOT / Path(p)).resolve() for p in (ignores or ()))
     suites: list[unittest.TestSuite] = []
     for target in targets:
-        suite = _load_single_target(loader, target, patterns)
+        suite = _load_single_target(
+            loader, target, patterns, include_standard=include_standard, include_pyjest=include_pyjest
+        )
         suite = _filter_suite(suite, exclude_patterns, ignore_paths)
         suites.append(suite)
     return unittest.TestSuite(suites)
@@ -212,23 +232,54 @@ def _default_targets_if_empty(targets: Sequence[str]) -> Sequence[str]:
     raise SystemExit("no pyjest file(s) exists")
 
 
-def _load_single_target(loader: unittest.TestLoader, target: str, patterns: Sequence[str]) -> unittest.TestSuite:
+def _load_single_target(
+    loader: unittest.TestLoader,
+    target: str,
+    patterns: Sequence[str],
+    *,
+    include_standard: bool,
+    include_pyjest: bool,
+) -> unittest.TestSuite:
     path = Path(target)
     if path.is_dir():
-        return _load_directory_target(loader, path, patterns)
+        return _load_directory_target(
+            loader, path, patterns, include_standard=include_standard, include_pyjest=include_pyjest
+        )
     if path.is_file():
-        return _load_file_target(loader, path)
+        return _load_file_target(loader, path, include_standard=include_standard, include_pyjest=include_pyjest)
     return loader.loadTestsFromName(target)
 
 
-def _load_directory_target(loader: unittest.TestLoader, path: Path, patterns: Sequence[str]) -> unittest.TestSuite:
+def _load_directory_target(
+    loader: unittest.TestLoader,
+    path: Path,
+    patterns: Sequence[str],
+    *,
+    include_standard: bool,
+    include_pyjest: bool,
+) -> unittest.TestSuite:
     if not _has_test_files(path):
         raise SystemExit(f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files.")
-    suites = [_load_directory_suite(loader, path, pattern) for pattern in patterns]
+    suites = [
+        _load_directory_suite(
+            loader, path, pattern, include_standard=include_standard, include_pyjest=include_pyjest
+        )
+        for pattern in patterns
+    ]
     return _merge_suites(suites)
 
 
-def _load_file_target(loader: unittest.TestLoader, path: Path) -> unittest.TestSuite:
+def _load_file_target(
+    loader: unittest.TestLoader,
+    path: Path,
+    *,
+    include_standard: bool,
+    include_pyjest: bool,
+) -> unittest.TestSuite:
+    if path.suffix == ".py" and not include_standard:
+        raise SystemExit(f"'{path}' is a Python file and cannot be run with --pyjest-only.")
+    if path.suffix == ".pyjest" and not include_pyjest:
+        raise SystemExit(f"'{path}' is a .pyjest file and cannot be run with this configuration.")
     if path.suffix not in {".py", ".pyjest"}:
         raise SystemExit(f"pyjest can only run Python files: '{path}'")
     if path.suffix == ".pyjest":

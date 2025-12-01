@@ -25,7 +25,7 @@ from .colors import (
     YELLOW,
     color,
 )
-from .discovery import _doc_summary, _format_test_name, _format_test_title, _module_display
+from .discovery import _doc_summary, _format_test_name, _module_display
 from .snapshot import print_snapshot_summary
 
 
@@ -134,7 +134,7 @@ class JestStyleResult(unittest.TestResult):
         self._progress_counts[status] += 1
         if self._current_test:
             module = self._current_test.__class__.__module__
-            title = _format_test_title(self._current_test)
+            title = _explicit_label(self._current_test)
             self._last_test_label = f"{module}::{title}"
         self._recent_statuses.append(status)
         if len(self._recent_statuses) > 16:
@@ -155,7 +155,7 @@ class JestStyleResult(unittest.TestResult):
         spinner = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"][self._spinner_state % 8]
         self._spinner_state += 1
         module_name = self._current_test.__class__.__module__
-        test_title = _format_test_title(self._current_test)
+        test_title = _explicit_label(self._current_test)
         pass_count = self._progress_counts.get("PASS", 0) + self._progress_counts.get("XPASS", 0)
         fail_count = self._progress_counts.get("FAIL", 0) + self._progress_counts.get("ERROR", 0)
         skip_count = self._progress_counts.get("SKIP", 0) + self._progress_counts.get("XF", 0)
@@ -291,10 +291,11 @@ class JestStyleResult(unittest.TestResult):
     ) -> None:
         report = self._module_report_for(test)
         summary = _doc_summary(getattr(test, "_testMethodDoc", None))
-        title = summary or _format_test_title(test)
+        title = _explicit_label(test)
         cls = test.__class__
-        class_name = cls.__name__
-        class_doc_title = _doc_summary(getattr(cls, "__doc__", None))
+        class_label = getattr(cls, "__pyjest_describe__", None)
+        class_name = class_label or cls.__name__
+        class_doc_title = class_label or _doc_summary(getattr(cls, "__doc__", None))
         module_name = cls.__module__
         detail_obj = TestDetail(
             name=title,
@@ -403,7 +404,7 @@ class JestStyleResult(unittest.TestResult):
             for test, err in entries:
                 module_name = test.__class__.__module__
                 file_display, _ = _module_display(module_name)
-                test_title = _format_test_title(test)
+                test_title = _explicit_label(test) or "<unnamed>"
                 pointer = color("›", BRIGHT_CYAN)
                 self.stream.writeln(
                     f"  {color('✕', BRIGHT_RED)} {DIM}{file_display}{RESET} {pointer} "
@@ -501,6 +502,20 @@ def _icon_map() -> dict[str, str]:
         "XF": color("≒", BRIGHT_YELLOW),
         "XPASS": color("★", BRIGHT_CYAN),
     }
+
+
+def _explicit_label(test: unittest.case.TestCase) -> str:
+    # Prefer label set by @test decorator on the bound test method, then on the instance.
+    method_name = getattr(test, "_testMethodName", "")
+    fn = getattr(test, method_name, None)
+    if fn:
+        explicit = getattr(fn, "__pyjest_test__", None)
+        if explicit:
+            return explicit
+    explicit = getattr(test, "__pyjest_test__", None)
+    if explicit:
+        return explicit
+    return ""
 
 
 def _format_badge(status: str, status_colors: dict[str, str]) -> str:
