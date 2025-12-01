@@ -177,7 +177,7 @@ class JestStyleResult(unittest.TestResult):
         icon = _icon_map().get(status, color("•", CYAN))
         # Level 0: basic inline checkmarks with no frame.
         if self.progress_fancy_level == 0:
-            self.stream.write(icon)
+            self.stream.write(f"{icon}\u2009")
             self._inline_progress_total += 1
             self.stream.flush()
             return
