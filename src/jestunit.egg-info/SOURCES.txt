@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-src/jestunit/__init__.py
-src/jestunit.egg-info/PKG-INFO
-src/jestunit.egg-info/SOURCES.txt
-src/jestunit.egg-info/dependency_links.txt
-src/jestunit.egg-info/entry_points.txt
-src/jestunit.egg-info/top_level.txt
