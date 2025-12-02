@@ -44,7 +44,7 @@ Add readable names to suites and tests:
 ```python
 from pyjest import autolabel, describe, test
 
-@autolabel()  # fill in labels for methods not decorated with @test
+@autolabel(strip_prefix="test_", title_case=True)  # fill in labels for undecorated methods
 @describe("User auth flows")
 class AuthTests(unittest.TestCase):
     @test("logs users in with valid credentials")
@@ -52,11 +52,27 @@ class AuthTests(unittest.TestCase):
         ...
 
     def test_logout_shows_confirmation(self):
-        ...  # labeled automatically as "test logout shows confirmation"
+        ...  # labeled automatically as "Logout Shows Confirmation"
+
+    @test.skip("known bug")
+    def test_password_reset_email(self):
+        ...
+
+    @test.todo("oauth flow")
+    def test_oauth_flow(self):
+        ...
 ```
 
-`@describe` sets a class label, `@test` sets a method label, and `@autolabel`
-fills in the rest without overriding explicit labels.
+Decorators:
+
+- `describe("label")` sets a class label.
+- `describe.skip("label", reason=None)` sets the label and marks the class skipped (unittest flags).
+- `describe.only("label")` focuses the suite; when any `.only` exists, only focused tests run.
+- `test("label")` sets a method label.
+- `test.skip("label", reason=None)` sets the label and marks the test skipped.
+- `test.only("label")` focuses that test/method.
+- `test.todo("label")` sets the label, marks it todo, and skips with reason `"TODO: {label}"`.
+- `autolabel(transform=None, strip_prefix=None, title_case=False)` fills in missing `__pyjest_test__` labels; by default strips an optional prefix (e.g., `"test_"`), replaces `_` with spaces, and title-cases when requested.
 
 ### Watch mode
 

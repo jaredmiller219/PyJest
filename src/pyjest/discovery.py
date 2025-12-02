@@ -212,6 +212,7 @@ def _load_targets(
             loader, target, patterns, include_standard=include_standard, include_pyjest=include_pyjest
         )
         suite = _filter_suite(suite, exclude_patterns, ignore_paths)
+        suite = _apply_only_filter(suite)
         suites.append(suite)
     return unittest.TestSuite(suites)
 
@@ -326,6 +327,27 @@ def _filter_suite(
             continue
         filtered.append(test)
     return unittest.TestSuite(filtered)
+
+
+def _is_only(test: unittest.case.TestCase) -> bool:
+    if getattr(test, "__pyjest_only__", False):
+        return True
+    cls = test.__class__
+    if getattr(cls, "__pyjest_only__", False):
+        return True
+    method_name = getattr(test, "_testMethodName", "")
+    fn = getattr(test, method_name, None)
+    if fn and getattr(fn, "__pyjest_only__", False):
+        return True
+    return False
+
+
+def _apply_only_filter(suite: unittest.TestSuite) -> unittest.TestSuite:
+    tests = list(_iter_tests(suite))
+    if not any(_is_only(test) for test in tests):
+        return suite
+    focused = [test for test in tests if _is_only(test)]
+    return unittest.TestSuite(focused)
 
 
 def _test_file(test: unittest.case.TestCase) -> Path | None:
