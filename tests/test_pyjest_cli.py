@@ -53,6 +53,7 @@ class PyjestCliTests(unittest.TestCase):
         result = _run_pyjest(["--pyjest-only", "tests/fixtures"])
         self.assertEqual(result.returncode, 0, msg=result.stdout)
         self.assertIn("Pyjest label discovery (.pyjest)", result.stdout)
+        self.assertIn("Pyjest label discovery (.pyj)", result.stdout)
 
 
 if __name__ == "__main__":

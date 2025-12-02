@@ -14,6 +14,7 @@ from typing import Iterable, Sequence
 
 
 PROJECT_ROOT = Path.cwd()
+PYJEST_SUFFIXES = {".pyjest", ".pyj"}
 
 
 def _set_project_root(root: Path) -> None:
@@ -100,7 +101,7 @@ def _format_test_title(test: unittest.case.TestCase) -> str:
 
 
 def _pyjest_matches_pattern(path: Path, pattern: str) -> bool:
-    """Return True if a .pyjest file logically matches the discovery pattern."""
+    """Return True if a .pyjest/.pyj file logically matches the discovery pattern."""
     pretend_py = path.with_suffix(".py").name
     return fnmatch.fnmatch(pretend_py, pattern)
 
@@ -140,7 +141,7 @@ def _discover_pyjest_files(loader: unittest.TestLoader, directory: Path, pattern
     suites: list[unittest.TestSuite] = []
     for root, _, files in os.walk(directory):
         for name in files:
-            if not name.endswith(".pyjest"):
+            if not any(name.endswith(suffix) for suffix in PYJEST_SUFFIXES):
                 continue
             path = Path(root) / name
             if not _pyjest_matches_pattern(path, pattern):
@@ -176,7 +177,7 @@ def _ensure_python_project(root: Path) -> None:
     if not _is_python_project(root):
         raise SystemExit(
             "This directory is not a Python/PyJest project.\n"
-            "Run pyjest from a project root with a pyproject and .py/.pyjest tests,\n"
+            "Run pyjest from a project root with a pyproject and .py/.pyj/.pyjest tests,\n"
             "or pass --root to point at one."
         )
 
@@ -218,7 +219,7 @@ def _load_targets(
 def _has_test_files(path: Path) -> bool:
     for root, _, files in os.walk(path):
         for name in files:
-            if name.endswith(".py") or name.endswith(".pyjest"):
+            if name.endswith(".py") or any(name.endswith(suffix) for suffix in PYJEST_SUFFIXES):
                 return True
     return False
 
@@ -259,7 +260,7 @@ def _load_directory_target(
     include_pyjest: bool,
 ) -> unittest.TestSuite:
     if not _has_test_files(path):
-        raise SystemExit(f"pyjest only runs Python tests. Directory '{path}' has no .py or .pyjest files.")
+        raise SystemExit(f"pyjest only runs Python tests. Directory '{path}' has no .py, .pyj, or .pyjest files.")
     suites = [
         _load_directory_suite(
             loader, path, pattern, include_standard=include_standard, include_pyjest=include_pyjest
@@ -278,14 +279,14 @@ def _load_file_target(
 ) -> unittest.TestSuite:
     if path.suffix == ".py" and not include_standard:
         raise SystemExit(f"'{path}' is a Python file and cannot be run with --pyjest-only.")
-    if path.suffix == ".pyjest" and not include_pyjest:
-        raise SystemExit(f"'{path}' is a .pyjest file and cannot be run with this configuration.")
-    if path.suffix not in {".py", ".pyjest"}:
+    if path.suffix in PYJEST_SUFFIXES and not include_pyjest:
+        raise SystemExit(f"'{path}' is a {path.suffix} file and cannot be run with this configuration.")
+    if path.suffix not in {".py", *PYJEST_SUFFIXES}:
         raise SystemExit(f"pyjest can only run Python files: '{path}'")
-    if path.suffix == ".pyjest":
+    if path.suffix in PYJEST_SUFFIXES:
         return _load_tests_from_pyjest_file(loader, path)
     raise SystemExit(
-        f"'{path}' is not a .pyjest file. Rename it to end with .pyjest or pass an importable module path."
+        f"'{path}' is not a .pyj/.pyjest file. Rename it to end with .pyj or .pyjest, or pass an importable module path."
     )
 
 

@@ -61,7 +61,7 @@ def targets_from_changed(changed: set[Path], default_targets: Sequence[str]) -> 
         return list(default_targets)
     targets: list[str] = []
     for path in sorted(changed):
-        if path.suffix == ".pyjest":
+        if path.suffix in {".pyjest", ".pyj"}:
             targets.append(str(path))
         elif path.suffix == ".py":
             targets.append(_module_name_from_path(path))
@@ -77,7 +77,7 @@ def wait_for_change(snapshot: dict[Path, float], root: Path, interval: float) ->
 
 
 def _iter_watchable(root: Path) -> Iterable[Path]:
-    patterns = (".py", ".pyjest")
+    patterns = (".py", ".pyj", ".pyjest")
     for path in root.rglob("*"):
         if path.is_dir() or _is_hidden(path):
             continue

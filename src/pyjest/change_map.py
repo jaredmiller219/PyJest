@@ -27,7 +27,7 @@ def infer_targets_from_changes(changed: set[Path], default_targets: Sequence[str
     """Try to pick targets based on changed files and loaded modules."""
     targets = set()
     for path in changed:
-        if path.suffix in {".py", ".pyjest"}:
+        if path.suffix in {".py", ".pyj", ".pyjest"}:
             targets.add(_module_name_from_path(path))
     # If we saw only non-test files, map to modules that import them (best-effort).
     if not targets:

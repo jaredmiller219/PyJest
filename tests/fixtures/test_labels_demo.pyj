@@ -1,0 +1,14 @@
+import unittest
+
+from pyjest import describe, test
+
+
+@describe("Pyjest label discovery (.pyj)")
+class LabelFilePyjTests(unittest.TestCase):
+    @test("decorator is picked up in .pyj module")
+    def test_label_from_decorator(self) -> None:
+        self.assertTrue(True)
+
+
+if __name__ == "__main__":
+    unittest.main()

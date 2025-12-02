@@ -27,13 +27,13 @@ pyjest --pattern 'test_*.py' tests
 
 Use `--root /path/to/project` to point the runner at a different working tree
 without `cd`-ing first. Targets accept modules, packages, or files ending in
-`.py` or `.pyjest`; leave them blank to auto-discover tests in `./tests` (PyJest
-automatically picks up `.pyjest` files as part of discovery).
+`.py`, `.pyj`, or `.pyjest`; leave them blank to auto-discover tests in `./tests`
+(PyJest automatically picks up `.pyj`/`.pyjest` files as part of discovery).
 
 ### Discovery and targeting
 
 - Patterns: defaults to `test*.py`, but automatically also tries `*_test.py` and `tests.py` when they exist.
-- `.pyjest` files: discovered alongside normal Python tests; use `--pyjest-only` to ignore `.py` files.
+- `.pyj`/`.pyjest` files: discovered alongside normal Python tests; use `--pyjest-only` to ignore `.py` files.
 - Excludes: `--pattern-exclude PATTERN` and `--ignore PATH` skip noisy files during discovery.
 - Targets: pass directories, files, or import paths; omit to run `tests/` if present.
 
@@ -99,7 +99,7 @@ bundles targets before dispatching. Keep `--runInBand` for strictly serial runs.
 - `--run-failures-first`: in watch mode, rerun modules that just failed before widening to everything else.
 - `--root PATH`: treat PATH as the project root (affects discovery, reports, coverage output).
 - `--pattern GLOB` / `--pattern-exclude PATTERN` / `--ignore PATH`: tune discovery to include/exclude files and directories.
-- `--pyjest-only`: discover only `.pyjest` tests (skip regular `.py` tests).
+- `--pyjest-only`: discover only `.pyj`/`.pyjest` tests (skip regular `.py` tests).
 - `--bail` / `--failfast`: stop after the first failure.
 - `--runInBand`: force serial execution (current default).
 - `--maxWorkers N` + `--maxTargetsPerWorker M`: experimental parallel fan-out; optionally bundle targets before dispatching to workers.
