@@ -120,7 +120,7 @@ bundles targets before dispatching. Keep `--runInBand` for strictly serial runs.
 - `--runInBand`: force serial execution (current default).
 - `--maxWorkers N` + `--maxTargetsPerWorker M`: experimental parallel fan-out; optionally bundle targets before dispatching to workers.
 - `--buffer` / `--buf`: capture stdout/stderr during tests so progress output stays clean.
-- Progress style: `--progress-fancy {0,1,2}` (or `--fancy-progress`) switches between inline glyphs, compact one-line stats, and a framed table; `--buffer` enables the live spinner status line.
+- Progress style: `--progress-fancy {0,1,2}` (or `--fancy-progress`) switches between the six-dot spinner (default), compact one-line stats, and a framed table; `--buffer` keeps the spinner clean by buffering test output.
 - Coverage: `--coverage` to enable coverage, `--coverage-html [DIR]` to write HTML, `--coverage-threshold PCT` to fail below a percentage, `--coverage-bars` to print per-file bars.
 - Reporting: `--report-format console json tap junit` to emit machine-readable reports (`console` always on); `--report-modules` / `--no-report-modules` toggles per-module breakdowns; `--report-suite-table` shows a compact suite table; `--report-outliers` shows fastest/slowest sections.
 - Snapshots: `--updateSnapshot` to create/update snapshots; `--snapshot-summary` to print what changed.

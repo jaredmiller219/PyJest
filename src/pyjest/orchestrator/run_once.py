@@ -10,9 +10,12 @@ from .runner import collect_parallel_results, run_suite, sequential_result
 
 
 def run_once(args) -> int:
-    if args.maxWorkers > 1 and len(args.targets) > 1:
-        return _run_parallel_targets(args)
-    return _run_serial_targets(args, args.targets)
+    try:
+        if args.maxWorkers > 1 and len(args.targets) > 1:
+            return _run_parallel_targets(args)
+        return _run_serial_targets(args, args.targets)
+    except KeyboardInterrupt:
+        return 130
 
 
 def _run_parallel_targets(args) -> int:

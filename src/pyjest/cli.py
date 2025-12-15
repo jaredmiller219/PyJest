@@ -146,7 +146,7 @@ def _add_execution_args(parser: argparse.ArgumentParser) -> None:
         choices=[0, 1, 2],
         default=0,
         metavar="{0,1,2}",
-        help="Fancy progress level: 0 = basic checkmarks, 1 = compact one-line stats, 2 = framed with stats",
+        help="Fancy progress level: 0 = six-dot spinner, 1 = compact one-line stats, 2 = framed with stats",
     )
     parser.add_argument(
         "--fancy-progress",

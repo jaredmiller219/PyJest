@@ -9,6 +9,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from typing import Sequence
+from typing import Sequence
 
 from ..coverage_support import coverage_threshold_failed, make_coverage, report_coverage
 from ..discovery import _load_targets
@@ -53,13 +54,24 @@ def failed_modules(result: unittest.result.TestResult) -> list[str]:
 def collect_parallel_results(args) -> tuple[list[unittest.result.TestResult], list[str]]:
     outputs: list[str] = []
     results: list[unittest.result.TestResult] = []
-    with ThreadPoolExecutor(max_workers=args.maxWorkers) as pool:
-        futures = [_submit_parallel_task(pool, args, target_group) for target_group in args.targets]
+    pool = ThreadPoolExecutor(max_workers=args.maxWorkers)
+    futures = [_submit_parallel_task(pool, args, target_group) for target_group in args.targets]
+    try:
         for result, threshold_failed, text in _gather_results(futures, args.coverage_threshold):
             outputs.append(text)
             if threshold_failed:
                 result.failures.append(("coverage", "threshold not met"))  # type: ignore[arg-type]
             results.append(result)
+    except KeyboardInterrupt:
+        for future in futures:
+            future.cancel()
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    except Exception:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        pool.shutdown(wait=True)
     return results, outputs
 
 
@@ -110,7 +122,7 @@ def _finish_coverage(cov, html_dir: str | None, show_bars: bool) -> float | None
 
 def _run_suite_with_runner(suite: unittest.TestSuite, stream, args):
     fancy_level = getattr(args, "progress_fancy", 0)
-    spinner = fancy_level == 1  # one-line stats mode
+    spinner = fancy_level in (0, 1)  # default and one-line stats modes use spinner
     runner = JestStyleTestRunner(
         failfast=args.failfast,
         buffer=args.buffer,

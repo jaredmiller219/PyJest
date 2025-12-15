@@ -6,6 +6,10 @@ import time
 import unittest
 from collections import Counter
 from dataclasses import dataclass, field
+from contextlib import contextmanager
+from functools import lru_cache
+import signal
+import threading
 from pathlib import Path
 from typing import IO, Sequence
 
@@ -115,6 +119,7 @@ class JestStyleResult(unittest.TestResult):
         self._inline_row_pos = 0
         self._inline_header_drawn = False
         self.progress_fancy_level: int = 0
+        self.interrupted: bool = False
 
     @property
     def successes(self) -> Sequence[unittest.case.TestCase]:
@@ -152,7 +157,7 @@ class JestStyleResult(unittest.TestResult):
             return
         self._progress_last = now
         elapsed = now - self._progress_start
-        spinner = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"][self._spinner_state % 8]
+        spinner = _rectangle_spinner_frame(self._spinner_state)
         self._spinner_state += 1
         module_name = self._current_test.__class__.__module__
         test_title = _explicit_label(self._current_test)
@@ -546,6 +551,62 @@ def _format_duration(seconds: float) -> str:
     return f"{seconds:.2f} s"
 
 
+def _rectangle_spinner_frame(state: int) -> str:
+    frames = _rectangle_spinner_frames()
+    return frames[state % len(frames)]
+
+
+@lru_cache(maxsize=1)
+def _rectangle_spinner_frames() -> tuple[str, ...]:
+    """Six-dot rectangle spinner with a moving gap around the perimeter."""
+    # Braille dots are numbered:
+    # 1 4
+    # 2 5
+    # 3 6
+    # We light all but one dot, moving the gap clockwise to create motion.
+    perimeter_holes = [
+        1,  # top-left empty
+        4,  # top-right empty
+        5,  # mid-right empty
+        6,  # bottom-right empty
+        3,  # bottom-left empty
+        2,  # mid-left empty
+    ]
+    frames: list[str] = []
+    for hole in perimeter_holes:
+        dots = [dot for dot in range(1, 7) if dot != hole]
+        frames.append(_braille_char(dots))
+    return tuple(frames)
+
+
+def _braille_char(enabled_dots: Sequence[int]) -> str:
+    bits = 0
+    for dot in enabled_dots:
+        if 1 <= dot <= 8:
+            bits |= 1 << (dot - 1)
+    return chr(0x2800 + bits)
+
+
+@contextmanager
+def _stop_on_sigint(result: unittest.TestResult):
+    # signal.signal is only valid in the main thread; fall back to a no-op elsewhere
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    original = signal.getsignal(signal.SIGINT)
+
+    def handler(signum, frame):
+        result.stop()
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, original)
+
+
 class JestStyleTestRunner(unittest.TextTestRunner):
     resultclass = JestStyleResult
 
@@ -576,16 +637,25 @@ class JestStyleTestRunner(unittest.TextTestRunner):
         result.progress_fancy_level = getattr(self, "progress_fancy", 0)
         start_time = time.perf_counter()
 
+        interrupted = False
         result.startTestRun()
         try:
-            test(result)
+            with _stop_on_sigint(result):
+                test(result)
+        except KeyboardInterrupt:
+            interrupted = True
+            result.interrupted = True
+            result.stop()
         finally:
             result.stopTestRun()
-        result.close_progress_block()
-
-        # Drop a newline after the inline progress symbols.
-        if self.stream is not None:
-            self.stream.writeln("")
+            result.close_progress_block()
+            # Drop a newline after the inline progress symbols.
+            if self.stream is not None:
+                self.stream.writeln("")
+        if interrupted:
+            if self.stream is not None:
+                self.stream.writeln("Test run interrupted by user.")
+            raise KeyboardInterrupt
         duration = time.perf_counter() - start_time
         result.print_module_reports()
         result.printErrors()
