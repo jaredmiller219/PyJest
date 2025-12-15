@@ -648,13 +648,16 @@ class JestStyleTestRunner(unittest.TextTestRunner):
             result.stop()
         finally:
             result.stopTestRun()
-            result.close_progress_block()
-            # Drop a newline after the inline progress symbols.
-            if self.stream is not None:
-                self.stream.writeln("")
+            if not interrupted:
+                result.close_progress_block()
+                # Drop a newline after the inline progress symbols.
+                if self.stream is not None:
+                    self.stream.writeln("")
+            elif self.stream is not None:
+                # Keep the prompt on a fresh line without dumping extra output.
+                self.stream.write("\n")
+                self.stream.flush()
         if interrupted:
-            if self.stream is not None:
-                self.stream.writeln("Test run interrupted by user.")
             raise KeyboardInterrupt
         duration = time.perf_counter() - start_time
         result.print_module_reports()
