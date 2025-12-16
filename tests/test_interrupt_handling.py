@@ -22,7 +22,7 @@ class InterruptHandlingTests(unittest.TestCase):
             runner.run(suite)
 
         output = stream.getvalue()
-        self.assertNotIn("Test run interrupted by user.", output)
+        self.assertIn("Test run interrupted by user.", output)
         self.assertNotIn("Test Suites:", output)
 
 

@@ -44,7 +44,8 @@ def _sleep_until_change(ctx: "WatchContext", args) -> None:
 
 
 def _retarget_after_change(ctx: "WatchContext", args) -> None:
-    _print_change_notice(ctx.last_changed, ctx.root)
+    if not getattr(args, "watch_quiet", False):
+        _print_change_notice(ctx.last_changed, ctx.root)
     ctx.targets = _next_targets(args, ctx.last_changed, ctx.failed_targets)
 
 
@@ -53,7 +54,7 @@ def _initial_watch_context(args) -> "WatchContext":
     loader = unittest.TestLoader()
     snapshot = snapshot_watchable_files(root)
     targets = list(args.targets)
-    return WatchContext(root=root, loader=loader, snapshot=snapshot, targets=targets)
+    return WatchContext(root=root, loader=loader, snapshot=snapshot, targets=targets, quiet=getattr(args, "watch_quiet", False))
 
 
 def _run_watch_iteration(ctx: "WatchContext", args):
@@ -95,6 +96,8 @@ def _print_change_notice(changed: set[Path], root: Path) -> None:
 
 
 def _print_failure_recap(ctx: "WatchContext") -> None:
+    if getattr(ctx, "quiet", False):
+        return
     if not ctx.last_fail:
         return
     failures = ", ".join(ctx.failed_targets) if ctx.failed_targets else "unknown modules"
@@ -121,3 +124,4 @@ class WatchContext:
     last_fail: bool = False
     last_changed: set[Path] = field(default_factory=set)
     last_failure_detail: str | None = None
+    quiet: bool = False

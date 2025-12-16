@@ -61,6 +61,11 @@ def _add_watch_args(parser: argparse.ArgumentParser) -> None:
         default=0,
         help="Maximum targets to assign to a single worker when running in parallel (0 = unlimited)",
     )
+    parser.add_argument(
+        "--watch-quiet",
+        action="store_true",
+        help="Reduce watch-mode chatter (suppress change notices and failure tips)",
+    )
 
 
 def _add_target_args(parser: argparse.ArgumentParser) -> None:
@@ -103,6 +108,24 @@ def _add_target_args(parser: argparse.ArgumentParser) -> None:
         "--pyjest-only",
         action="store_true",
         help="Run only .pyjest test files (ignore regular .py tests)",
+    )
+    parser.add_argument(
+        "--testNamePattern",
+        "--tnp",
+        default=None,
+        help="Run only tests whose names match this regex (applied to full test id)",
+    )
+    parser.add_argument(
+        "--module-pattern",
+        "--mp",
+        default=None,
+        help="Run only tests whose module path matches this glob",
+    )
+    parser.add_argument(
+        "--tag",
+        action="append",
+        default=[],
+        help="Run only tests whose labels contain this substring (case-insensitive). Repeatable.",
     )
 
 
@@ -155,6 +178,23 @@ def _add_execution_args(parser: argparse.ArgumentParser) -> None:
         dest="progress_fancy",
         help="Alias for --progress-fancy=2 (framed with stats)",
     )
+    parser.add_argument(
+        "--last-failed",
+        action="store_true",
+        help="Run only tests that failed in the previous run (if recorded)",
+    )
+    parser.add_argument(
+        "--rerun",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Re-run failed tests up to N times (without coverage) before marking them failed",
+    )
+    parser.add_argument(
+        "--snapshot-clean",
+        action="store_true",
+        help="Remove orphaned snapshot entries/files before running tests",
+    )
 
 
 def _add_coverage_args(parser: argparse.ArgumentParser) -> None:
@@ -188,6 +228,22 @@ def _add_coverage_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="PCT",
         help="Fail if total coverage percentage is below this value",
+    )
+    parser.add_argument(
+        "--coverage-threshold-module",
+        "--cov-thresh-module",
+        action="append",
+        default=[],
+        metavar="NAME=PCT",
+        help="Per-module coverage threshold (module glob=percent). Repeatable.",
+    )
+    parser.add_argument(
+        "--coverage-json",
+        nargs="?",
+        const="pyjest-coverage.json",
+        default=None,
+        metavar="PATH",
+        help="Write JSON coverage summary to PATH (default: pyjest-coverage.json)",
     )
     parser.set_defaults(coverage=False)
 

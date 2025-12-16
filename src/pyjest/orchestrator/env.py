@@ -22,5 +22,9 @@ def prepare_environment(args) -> None:
     args.root = root
     _set_project_root(root)
     SNAPSHOTS.configure(root=root, update=args.updateSnapshot, show_summary=args.snapshot_summary)
+    if getattr(args, "snapshot_clean", False):
+        removed = SNAPSHOTS.clean_orphans()
+        if removed:
+            print(f"Removed {len(removed)} orphaned snapshot file(s).")
     configure_diffs(args.max_diff_lines, args.color_diffs)
     _ensure_python_project(root)

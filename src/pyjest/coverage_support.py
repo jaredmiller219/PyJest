@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+import json
 
 from .colors import BRIGHT_GREEN, BRIGHT_RED, BRIGHT_YELLOW, color
 
@@ -18,12 +19,16 @@ def make_coverage(root: Path):
     return coverage_module.Coverage(branch=True, source=[str(root)])
 
 
-def report_coverage(cov: Any, html_dir: str | None, show_bars: bool = False) -> float:
+def report_coverage(
+    cov: Any, html_dir: str | None, show_bars: bool = False, json_path: str | None = None
+) -> tuple[float, list[dict[str, Any]]]:
     percent = _write_text_report(cov)
+    stats = _collect_file_stats(cov)
     if show_bars:
-        _print_file_highlights(cov)
+        _print_file_highlights(stats)
     _maybe_write_html(cov, html_dir)
-    return float(percent)
+    _maybe_write_json(percent, stats, json_path)
+    return float(percent), stats
 
 
 def coverage_threshold_failed(percent: float | None, threshold: float | None) -> bool:
@@ -106,8 +111,16 @@ def _maybe_write_html(cov: Any, html_dir: str | None) -> None:
     print(f"HTML coverage report written to {output_dir}")
 
 
-def _print_file_highlights(cov: Any, width: int = 20) -> None:
-    stats = _collect_file_stats(cov)
+def _maybe_write_json(percent: float, stats: list[dict[str, Any]], json_path: str | None) -> None:
+    if not json_path:
+        return
+    payload = {"summary": {"coverage": percent}, "files": stats}
+    path = Path(json_path).resolve()
+    path.write_text(json.dumps(payload, indent=2))
+    print(f"JSON coverage report written to {path}")
+
+
+def _print_file_highlights(stats: list[dict[str, Any]], width: int = 20) -> None:
     if not stats:
         return
     stats_sorted = sorted(stats, key=lambda item: item["percent"], reverse=True)

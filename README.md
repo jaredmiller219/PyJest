@@ -84,6 +84,7 @@ otherwise it falls back to polling (`--watch-interval`).
 - `--run-failures-first`: in watch mode, rerun previously failing modules before widening the scope.
 - `--watch-debounce 0.2`: wait a little after the first change to batch edits.
 - `--maxTargetsPerWorker`: when paired with `--maxWorkers`, group targets before fanning out.
+- `--watch-quiet`: reduce watch-mode chatter (suppress change notices/failure tips).
 
 Console output shows per-module/class breakdowns by default. Enable more sections
 as needed:
@@ -96,13 +97,17 @@ as needed:
 - `--coverage`: collect coverage (if `coverage.py` is installed).
 - `--coverage-html [DIR]`: write HTML to `coverage_html` (or a custom dir).
 - `--coverage-threshold PCT`: fail if total coverage drops below PCT.
+- `--coverage-threshold-module NAME=PCT`: per-module coverage threshold (glob matching).
 - `--coverage-bars`: print per-file coverage bars/sparklines in the console.
+- `--coverage-json [PATH]`: write JSON coverage summary (default `pyjest-coverage.json`).
 - `--report-format json tap junit`: emit machine-readable reports next to your project root (`pyjest-report.json`, `.tap`, `.junit.xml`). Console output is always shown.
 
 ### Snapshots
 
 `expect(value).to_match_snapshot()` stores values under `__snapshots__/<module>.snap.json`.
 Use `--updateSnapshot` to create/update snapshots and `--snapshot-summary` to print what changed.
+- `--snapshot-clean` removes orphaned snapshot files before running.
+- Snapshot mismatches now include a unified diff to help inspect changes quickly.
 
 ### Parallelism (experimental)
 
@@ -115,6 +120,9 @@ bundles targets before dispatching. Keep `--runInBand` for strictly serial runs.
 - `--run-failures-first`: in watch mode, rerun modules that just failed before widening to everything else.
 - `--root PATH`: treat PATH as the project root (affects discovery, reports, coverage output).
 - `--pattern GLOB` / `--pattern-exclude PATTERN` / `--ignore PATH`: tune discovery to include/exclude files and directories.
+- `--module-pattern GLOB`: run only tests whose module paths match this glob.
+- `--testNamePattern REGEX`: run only tests whose full id matches the regex.
+- `--tag SUBSTRING`: run only tests whose labels/describes contain the substring (repeatable).
 - `--pyjest-only`: discover only `.pyj`/`.pyjest` tests (skip regular `.py` tests).
 - `--bail` / `--failfast`: stop after the first failure.
 - `--runInBand`: force serial execution (current default).
@@ -124,6 +132,7 @@ bundles targets before dispatching. Keep `--runInBand` for strictly serial runs.
 - Coverage: `--coverage` to enable coverage, `--coverage-html [DIR]` to write HTML, `--coverage-threshold PCT` to fail below a percentage, `--coverage-bars` to print per-file bars.
 - Reporting: `--report-format console json tap junit` to emit machine-readable reports (`console` always on); `--report-modules` / `--no-report-modules` toggles per-module breakdowns; `--report-suite-table` shows a compact suite table; `--report-outliers` shows fastest/slowest sections.
 - Snapshots: `--updateSnapshot` to create/update snapshots; `--snapshot-summary` to print what changed.
+- Reruns/last failures: `--last-failed` to rerun only previously failing tests if cached, `--rerun N` to retry failures up to N times (without coverage).
 - Diffs: `--max-diff-lines N` caps diff size; `--no-color-diffs` disables colored diffs.
 
 ### Expect-style assertions

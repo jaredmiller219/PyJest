@@ -9,7 +9,9 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from typing import Sequence
-from typing import Sequence
+import re
+import fnmatch
+from pathlib import Path
 
 from ..coverage_support import coverage_threshold_failed, make_coverage, report_coverage
 from ..discovery import _load_targets
@@ -22,6 +24,7 @@ def run_suite(
 ) -> tuple[unittest.result.TestResult, float | None, str]:
     cov = _start_coverage_if_needed(args)
     stream = stream or sys.stdout
+    test_name_pattern = re.compile(args.testNamePattern) if getattr(args, "testNamePattern", None) else None
     suite = _load_targets(
         loader,
         targets,
@@ -30,11 +33,15 @@ def run_suite(
         args.ignore,
         include_standard=not getattr(args, "pyjest_only", False),
         include_pyjest=True,
+        test_name_pattern=test_name_pattern,
+        module_pattern=getattr(args, "module_pattern", None),
+        tags=getattr(args, "tag", ()),
     )
     start = time.perf_counter()
     result = _run_suite_with_runner(suite, stream, args)
     duration = time.perf_counter() - start
-    coverage_percent = _finish_coverage(cov, args.coverage_html, args.coverage_bars)
+    coverage_percent, coverage_stats = _finish_coverage(cov, args.coverage_html, args.coverage_bars, getattr(args, "coverage_json", None))
+    setattr(result, "_coverage_file_stats", coverage_stats)
     emit_reports(result, coverage_percent, duration, args)
     output_text = stream.getvalue() if isinstance(stream, io.StringIO) else ""
     label = getattr(args, "report_suffix", None)
@@ -51,13 +58,20 @@ def failed_modules(result: unittest.result.TestResult) -> list[str]:
     return sorted(modules)
 
 
+def failing_test_ids(result: unittest.result.TestResult) -> list[str]:
+    failing_tests = [test for test, _ in result.failures + result.errors]  # type: ignore[operator]
+    return [test.id() for test in failing_tests]
+
+
 def collect_parallel_results(args) -> tuple[list[unittest.result.TestResult], list[str]]:
     outputs: list[str] = []
     results: list[unittest.result.TestResult] = []
     pool = ThreadPoolExecutor(max_workers=args.maxWorkers)
     futures = [_submit_parallel_task(pool, args, target_group) for target_group in args.targets]
     try:
-        for result, threshold_failed, text in _gather_results(futures, args.coverage_threshold):
+        for result, threshold_failed, text in _gather_results(
+            futures, args.coverage_threshold, getattr(args, "coverage_threshold_module", {}), args.root
+        ):
             outputs.append(text)
             if threshold_failed:
                 result.failures.append(("coverage", "threshold not met"))  # type: ignore[arg-type]
@@ -97,10 +111,12 @@ def record_watch_outcome(
     return last_fail, failed_modules(result), detail
 
 
-def _gather_results(futures, threshold: float | None):
+def _gather_results(futures, threshold: float | None, module_thresholds: dict[str, float], root: Path):
     for future in futures:
         result, coverage_percent, text = future.result()
-        threshold_failed = coverage_threshold_failed(coverage_percent, threshold)
+        threshold_failed = coverage_threshold_failed(coverage_percent, threshold) or _module_thresholds_failed(
+            getattr(result, "_coverage_file_stats", None) or [], module_thresholds, root
+        )
         yield result, threshold_failed, text
 
 
@@ -112,12 +128,16 @@ def _start_coverage_if_needed(args):
     return cov
 
 
-def _finish_coverage(cov, html_dir: str | None, show_bars: bool) -> float | None:
+def _finish_coverage(
+    cov, html_dir: str | None, show_bars: bool, json_path: str | None
+) -> tuple[float | None, list[dict] | None]:
     if not cov:
-        return None
+        return None, None
     cov.stop()
     cov.save()
-    return report_coverage(cov, html_dir, show_bars)
+    percent, stats = report_coverage(cov, html_dir, show_bars, json_path)
+    setattr(cov, "_pyjest_file_stats", stats)
+    return percent, stats
 
 
 def _run_suite_with_runner(suite: unittest.TestSuite, stream, args):
@@ -151,3 +171,23 @@ def _submit_parallel_task(pool: ThreadPoolExecutor, args, target: Sequence[str])
 
 def _prefix_lines(text: str, prefix: str) -> str:
     return "\n".join(f"{prefix}{line}" if line.strip() else line for line in text.splitlines())
+
+
+def _module_thresholds_failed(stats: list[dict], thresholds: dict[str, float], root: Path) -> bool:
+    if not thresholds:
+        return False
+    failed = False
+    for entry in stats:
+        filename = entry.get("filename")
+        percent = entry.get("percent", 0.0)
+        if not filename:
+            continue
+        try:
+            rel = Path(filename).resolve().relative_to(root)
+        except Exception:
+            rel = Path(filename)
+        module = rel.with_suffix("").as_posix().replace("/", ".")
+        for pattern, threshold in thresholds.items():
+            if fnmatch.fnmatch(module, pattern) and percent < threshold:
+                failed = True
+    return failed

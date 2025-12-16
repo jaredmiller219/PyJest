@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -94,10 +95,11 @@ class SnapshotStore:
             if self.show_summary:
                 print(f"[snapshot] updated {file_path}:{snap_name}")
             return
+        diff = _render_diff(expected, value)
         raise AssertionError(
             f"Snapshot mismatch for '{snap_name}'. "
             "Re-run with --updateSnapshot to accept new output.\n"
-            f"Expected: {expected!r}\nReceived: {value!r}"
+            f"Expected: {expected!r}\nReceived: {value!r}\nDiff:\n{diff}"
         )
 
     def _read_snapshot_file(self, path: Path) -> Dict[str, Any]:
@@ -122,6 +124,23 @@ class SnapshotStore:
             lines.append(f"  - {action}: {file_path}:{snap_name}")
         return lines
 
+    def clean_orphans(self) -> list[Path]:
+        """Delete snapshot files whose corresponding modules no longer exist."""
+        removed: list[Path] = []
+        base = self.root / "__snapshots__"
+        if not base.exists():
+            return removed
+        for path in base.rglob("*.snap.json"):
+            module_rel = path.relative_to(base).with_suffix(".py")
+            module_path = self.root / module_rel
+            if not module_path.exists():
+                try:
+                    path.unlink()
+                    removed.append(path)
+                except Exception:
+                    continue
+        return removed
+
 
 STORE = SnapshotStore()
 
@@ -135,3 +154,22 @@ def print_snapshot_summary() -> None:
         return
     for line in lines:
         print(line)
+
+
+def _render_diff(expected: Any, actual: Any) -> str:
+    left = json.dumps(expected, indent=2, sort_keys=True)
+    right = json.dumps(actual, indent=2, sort_keys=True)
+    diff = difflib.unified_diff(
+        left.splitlines(),
+        right.splitlines(),
+        fromfile="expected",
+        tofile="received",
+        lineterm="",
+    )
+    lines = list(diff)
+    if not lines:
+        return ""
+    max_lines = 200
+    if len(lines) > max_lines:
+        return "\n".join(lines[:max_lines] + [f"... ({len(lines) - max_lines} more lines truncated)"])
+    return "\n".join(lines)

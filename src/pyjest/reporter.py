@@ -658,6 +658,8 @@ class JestStyleTestRunner(unittest.TextTestRunner):
                 self.stream.write("\n")
                 self.stream.flush()
         if interrupted:
+            if self.stream is not None:
+                self.stream.writeln("Test run interrupted by user.")
             raise KeyboardInterrupt
         duration = time.perf_counter() - start_time
         result.print_module_reports()

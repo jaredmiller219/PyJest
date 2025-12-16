@@ -7,6 +7,7 @@ import importlib.util
 from importlib.machinery import SourceFileLoader
 import inspect
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -201,6 +202,9 @@ def _load_targets(
     *,
     include_standard: bool = True,
     include_pyjest: bool = True,
+    test_name_pattern: re.Pattern[str] | None = None,
+    module_pattern: str | None = None,
+    tags: Sequence[str] | None = None,
 ) -> unittest.TestSuite:
     targets = _default_targets_if_empty(targets)
     patterns = _auto_patterns(pattern, PROJECT_ROOT)
@@ -211,7 +215,14 @@ def _load_targets(
         suite = _load_single_target(
             loader, target, patterns, include_standard=include_standard, include_pyjest=include_pyjest
         )
-        suite = _filter_suite(suite, exclude_patterns, ignore_paths)
+        suite = _filter_suite(
+            suite,
+            exclude_patterns,
+            ignore_paths,
+            test_name_pattern=test_name_pattern,
+            module_pattern=module_pattern,
+            tags=tags or (),
+        )
         suite = _apply_only_filter(suite)
         suites.append(suite)
     return unittest.TestSuite(suites)
@@ -313,17 +324,27 @@ def _iter_tests(suite: unittest.TestSuite) -> Iterable[unittest.case.TestCase]:
 
 
 def _filter_suite(
-    suite: unittest.TestSuite, excludes: Sequence[str], ignores: Sequence[Path]
+    suite: unittest.TestSuite,
+    excludes: Sequence[str],
+    ignores: Sequence[Path],
+    *,
+    test_name_pattern: re.Pattern[str] | None,
+    module_pattern: str | None,
+    tags: Sequence[str],
 ) -> unittest.TestSuite:
     if not excludes and not ignores:
-        return suite
+        # continue to tag/name/module filtering below
+        pass
     filtered: list[unittest.case.TestCase] = []
     for test in _iter_tests(suite):
         path = _test_file(test)
-        if path is None:
-            filtered.append(test)
+        if path and _should_exclude(path, excludes, ignores):
             continue
-        if _should_exclude(path, excludes, ignores):
+        if test_name_pattern and not _matches_test_name(test, test_name_pattern):
+            continue
+        if module_pattern and not _matches_module(test, module_pattern):
+            continue
+        if tags and not _matches_tags(test, tags):
             continue
         filtered.append(test)
     return unittest.TestSuite(filtered)
@@ -376,3 +397,19 @@ def _should_exclude(path: Path, excludes: Sequence[str], ignores: Sequence[Path]
             if str(rel_ignore).startswith(str(ignore)):
                 return True
     return False
+
+
+def _matches_test_name(test: unittest.case.TestCase, pattern: re.Pattern[str]) -> bool:
+    return bool(pattern.search(test.id()))
+
+
+def _matches_module(test: unittest.case.TestCase, pattern: str) -> bool:
+    mod = test.__class__.__module__
+    return fnmatch.fnmatch(mod, pattern)
+
+
+def _matches_tags(test: unittest.case.TestCase, tags: Sequence[str]) -> bool:
+    label = _format_test_title(test)
+    cls_label = getattr(test.__class__, "__pyjest_describe__", "") or ""
+    haystack = f"{label} {cls_label}".lower()
+    return all(tag.lower() in haystack for tag in tags)
